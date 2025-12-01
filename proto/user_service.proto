@@ -55,5 +55,5 @@ service UserService {
   rpc GetUser(GetUserRequest) returns (User);
   rpc UpdateUser(UpdateUserRequest) returns (User);
   rpc DeleteUser(DeleteUserRequest) returns (User);
-  rpc ListUsers(ListUsersRequest) returns (ListUserResponse);
+  rpc ListUsers(ListUsersRequest) returns (ListUsersResponse);
 }

@@ -1,0 +1,24 @@
+package repository
+
+import (
+	"context"
+	pb "service-1-user/proto"
+)
+
+// UserRepository defines the interface for user data operations
+type UserRepository interface {
+	// GetByID user by ID
+	GetByID(ctx context.Context, id int32) (*pb.User, error)
+
+	// Create new user
+	Create(ctx context.Context, name, email string) (*pb.User, error)
+
+	// Update user information
+	Update(ctx context.Context, id int32, name, email string) (*pb.User, error)
+
+	// Delete user by ID
+	Delete(ctx context.Context, id int32) error
+
+	// List all user with pagination
+	List(ctx context.Context, limit, offset int32) ([]*pb.User, int32, error)
+}
