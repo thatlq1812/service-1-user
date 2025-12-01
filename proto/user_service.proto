@@ -7,10 +7,10 @@ option go_package = "service-1-user/proto";
 
 
 message User {
-  int32 id = 1
+  int32 id = 1;
   string name = 2;
   string email = 3;
-  string create_at = 4;
+  string created_at = 4;
 }
 
 
@@ -55,5 +55,5 @@ service UserService {
   rpc GetUser(GetUserRequest) returns (User);
   rpc UpdateUser(UpdateUserRequest) returns (User);
   rpc DeleteUser(DeleteUserRequest) returns (User);
-  rpc ListUsers(ListUsersRequest) returns (ListArticlesResponse);
+  rpc ListUsers(ListUsersRequest) returns (ListUserResponse);
 }
