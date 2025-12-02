@@ -15,6 +15,12 @@ type Config struct {
 	User     string
 	Password string
 	DBName   string
+
+	MaxConns        int32
+	MinConns        int32
+	MaxConnLifetime time.Duration
+	MaxConnIdleTime time.Duration
+	ConnectTimeout  time.Duration
 }
 
 func NewPostgresPool(cfg Config) (*pgxpool.Pool, error) {
@@ -27,14 +33,19 @@ func NewPostgresPool(cfg Config) (*pgxpool.Pool, error) {
 	// Config pool
 	config, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
-		return nil, fmt.Errorf("Parse congif failed: %v", err)
+		return nil, fmt.Errorf("Parse config failed: %v", err)
 	}
 
 	// Define connection settings
-	config.MaxConns = 10
-	config.MinConns = 2
-	config.MaxConnLifetime = time.Hour
-	config.MaxConnIdleTime = 30 * time.Minute
+	config.MaxConns = cfg.MaxConns
+	config.MinConns = cfg.MinConns
+	config.MaxConnLifetime = cfg.MaxConnLifetime
+	config.MaxConnIdleTime = cfg.MaxConnIdleTime
+
+	timeout := cfg.ConnectTimeout
+	if timeout == 0 {
+		timeout = 5 * time.Second
+	}
 
 	// Create pool with 5 seconds timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

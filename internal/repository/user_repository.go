@@ -10,7 +10,13 @@ type UserRepository interface {
 	// GetByID user by ID
 	GetByID(ctx context.Context, id int32) (*pb.User, error)
 
-	// Create new user
+	// GetByEmailWithPassword user by email with password hash (for authentication)
+	GetByEmailWithPassword(ctx context.Context, email string) (*UserWithPassword, error)
+
+	// Create new user with password
+	CreateWithPassword(ctx context.Context, name, email, passwordHash string) (*pb.User, error)
+
+	// Create new user (legacy method without password)
 	Create(ctx context.Context, name, email string) (*pb.User, error)
 
 	// Update user information
@@ -21,4 +27,10 @@ type UserRepository interface {
 
 	// List all user with pagination
 	List(ctx context.Context, limit, offset int32) ([]*pb.User, int32, error)
+}
+
+// UserWithPassword extends User with password_hash field for internal use
+type UserWithPassword struct {
+	*pb.User
+	PasswordHash string
 }

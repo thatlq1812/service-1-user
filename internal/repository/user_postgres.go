@@ -73,7 +73,66 @@ func (r *userPostgresRepo) Create(ctx context.Context, name, email string) (*pb.
 	user.CreatedAt = createdAt.Format(time.RFC3339)
 
 	return &user, nil
+}
 
+// GetByEmailWithPassword implement method to get user by email with password hash
+func (r *userPostgresRepo) GetByEmailWithPassword(ctx context.Context, email string) (*UserWithPassword, error) {
+	query := `
+	SELECT id, name, email, password_hash, created_at
+	FROM users
+	WHERE email = $1
+	`
+
+	var user pb.User
+	var createdAt time.Time
+	var passwordHash string
+
+	err := r.db.QueryRow(ctx, query, email).Scan(
+		&user.Id,
+		&user.Name,
+		&user.Email,
+		&passwordHash,
+		&createdAt,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("Query user by email failed: %w", err)
+	}
+
+	// Convert time.Time to string
+	user.CreatedAt = createdAt.Format(time.RFC3339)
+
+	return &UserWithPassword{
+		User:         &user,
+		PasswordHash: passwordHash,
+	}, nil
+}
+
+// CreateWithPassword implement method to create new user with password
+func (r *userPostgresRepo) CreateWithPassword(ctx context.Context, name, email, passwordHash string) (*pb.User, error) {
+	query := `
+		INSERT INTO users (name, email, password_hash)
+		VALUES ($1, $2, $3)
+		RETURNING id, name, email, created_at
+	`
+
+	var user pb.User
+	var createdAt time.Time
+
+	err := r.db.QueryRow(ctx, query, name, email, passwordHash).Scan(
+		&user.Id,
+		&user.Name,
+		&user.Email,
+		&createdAt,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("Insert user with password failed: %w", err)
+	}
+
+	user.CreatedAt = createdAt.Format(time.RFC3339)
+
+	return &user, nil
 }
 
 // Update implement method for update user
