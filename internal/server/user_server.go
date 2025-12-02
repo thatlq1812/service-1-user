@@ -2,14 +2,23 @@ package server
 
 import (
 	"context"
-	"regexp"
+	"strings"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"agrios/pkg/common"
 	"service-1-user/internal/auth"
 	"service-1-user/internal/repository"
 	pb "service-1-user/proto"
+)
+
+const (
+	defaultPageSize    = 10
+	maxPageSize        = 100
+	errNoRows          = "no rows in result set"
+	errDuplicateKey    = "duplicate"
+	errUniqueViolation = "unique"
 )
 
 // userServiceServer implements UserServiceServer interface
@@ -25,16 +34,16 @@ func NewUserServiceServer(repo repository.UserRepository) pb.UserServiceServer {
 	}
 }
 
-// GetUser implement RPC GetUser
+// GetUser retrieves a user by ID
 func (s *userServiceServer) GetUser(ctx context.Context, req *pb.GetUserRequest) (*pb.GetUserResponse, error) {
 	if req.Id <= 0 {
-		return nil, status.Errorf(codes.InvalidArgument, "User ID must be positive, got %d", req.Id)
+		return nil, status.Errorf(codes.InvalidArgument, "user ID must be positive, got %d", req.Id)
 	}
 
 	user, err := s.repo.GetByID(ctx, req.Id)
 	if err != nil {
-		if err.Error() == "no rows in result set" {
-			return nil, status.Errorf(codes.NotFound, "User with ID %d not found", req.Id)
+		if strings.Contains(err.Error(), errNoRows) {
+			return nil, status.Errorf(codes.NotFound, "user with ID %d not found", req.Id)
 		}
 		return nil, status.Errorf(codes.Internal, "failed to get user: %v", err)
 	}
@@ -42,22 +51,22 @@ func (s *userServiceServer) GetUser(ctx context.Context, req *pb.GetUserRequest)
 	return &pb.GetUserResponse{User: user}, nil
 }
 
-// CreateUser implement RPC CreateUser
+// CreateUser creates a new user with optional password
 func (s *userServiceServer) CreateUser(ctx context.Context, req *pb.CreateUserRequest) (*pb.CreateUserResponse, error) {
-	//1. Validate input
+	// 1. Validate input
 	if req.Name == "" {
-		return nil, status.Errorf(codes.InvalidArgument, "Name is required")
+		return nil, status.Error(codes.InvalidArgument, "name is required")
 	}
 	if req.Email == "" {
-		return nil, status.Errorf(codes.InvalidArgument, "Email is required")
+		return nil, status.Error(codes.InvalidArgument, "email is required")
 	}
 
-	// 2. Basic email validation
-	if !isValidEmail(req.Email) {
-		return nil, status.Errorf(codes.InvalidArgument, "Email format is invalid: %s", req.Email)
+	// 2. Validate email format
+	if !common.IsValidEmail(req.Email) {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid email format: %s", req.Email)
 	}
 
-	// 3. Hash password if provided
+	// 3. Hash password if provided and create user
 	var user *pb.User
 	var err error
 
@@ -65,23 +74,23 @@ func (s *userServiceServer) CreateUser(ctx context.Context, req *pb.CreateUserRe
 		// Hash the password
 		passwordHash, err := auth.HashPassword(req.Password)
 		if err != nil {
-			return nil, status.Errorf(codes.Internal, "Failed to hash password: %v", err)
+			return nil, status.Errorf(codes.Internal, "failed to hash password: %v", err)
 		}
 
 		// Create user with password
 		user, err = s.repo.CreateWithPassword(ctx, req.Name, req.Email, passwordHash)
 		if err != nil {
-			if containsString(err.Error(), "duplicate") || containsString(err.Error(), "unique") {
-				return nil, status.Errorf(codes.AlreadyExists, "Email %s is already registered", req.Email)
+			if isDuplicateError(err) {
+				return nil, status.Errorf(codes.AlreadyExists, "email %s is already registered", req.Email)
 			}
 			return nil, status.Errorf(codes.Internal, "failed to create user: %v", err)
 		}
 	} else {
-		// Create user without password (legacy)
+		// Create user without password (legacy support)
 		user, err = s.repo.Create(ctx, req.Name, req.Email)
 		if err != nil {
-			if containsString(err.Error(), "duplicate") || containsString(err.Error(), "unique") {
-				return nil, status.Errorf(codes.AlreadyExists, "Email %s is already registered", req.Email)
+			if isDuplicateError(err) {
+				return nil, status.Errorf(codes.AlreadyExists, "email %s is already registered", req.Email)
 			}
 			return nil, status.Errorf(codes.Internal, "failed to create user: %v", err)
 		}
@@ -90,191 +99,174 @@ func (s *userServiceServer) CreateUser(ctx context.Context, req *pb.CreateUserRe
 	return &pb.CreateUserResponse{User: user}, nil
 }
 
-// Helper function to check valid email format (simple version)
-var emailRegex = regexp.MustCompile("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$")
-
-func isValidEmail(email string) bool {
-	return emailRegex.MatchString(email)
-}
-
-// Helper function to check if a substring is in a string
-func containsString(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && hasSubstring(s, substr))
-}
-
-func hasSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		match := true
-		for j := 0; j < len(substr); j++ {
-			if s[i+j] != substr[j] {
-				match = false
-				break
-			}
-		}
-		if match {
-			return true
-		}
+// isDuplicateError checks if error is related to duplicate key constraint violation
+func isDuplicateError(err error) bool {
+	if err == nil {
+		return false
 	}
-	return false
+	errMsg := err.Error()
+	return strings.Contains(errMsg, errDuplicateKey) || strings.Contains(errMsg, errUniqueViolation)
 }
 
-// UpdateUser implement RPC UpdateUser
+// UpdateUser updates user information
 func (s *userServiceServer) UpdateUser(ctx context.Context, req *pb.UpdateUserRequest) (*pb.UpdateUserResponse, error) {
 	// 1. Validate input
 	if req.Id <= 0 {
-		return nil, status.Errorf(codes.InvalidArgument, "User id must be positive")
+		return nil, status.Error(codes.InvalidArgument, "user ID must be positive")
 	}
 	if req.Name == "" {
-		return nil, status.Errorf(codes.InvalidArgument, "Name is required")
+		return nil, status.Error(codes.InvalidArgument, "name is required")
 	}
 	if req.Email == "" {
-		return nil, status.Errorf(codes.InvalidArgument, "Email is required")
+		return nil, status.Error(codes.InvalidArgument, "email is required")
 	}
 
-	// 2. Call repository
+	// 2. Validate email format
+	if !common.IsValidEmail(req.Email) {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid email format: %s", req.Email)
+	}
+
+	// 3. Update user
 	user, err := s.repo.Update(ctx, req.Id, req.Name, req.Email)
 	if err != nil {
-		// Check if not found
-		if err.Error() == "no rows in result set" {
-			return nil, status.Errorf(codes.NotFound, "User with ID %d not found", req.Id)
+		if strings.Contains(err.Error(), errNoRows) {
+			return nil, status.Errorf(codes.NotFound, "user with ID %d not found", req.Id)
 		}
-		//Check if duplicate email
-		if containsString(err.Error(), "duplicate") || containsString(err.Error(), "unique") {
-			return nil, status.Errorf(codes.AlreadyExists, "Email %s is already registered", req.Email)
+		if isDuplicateError(err) {
+			return nil, status.Errorf(codes.AlreadyExists, "email %s is already registered", req.Email)
 		}
 		return nil, status.Errorf(codes.Internal, "failed to update user: %v", err)
 	}
+
 	return &pb.UpdateUserResponse{User: user}, nil
 }
 
-// DeleteUser implement RPC DeleteUser
+// DeleteUser deletes a user by ID
 func (s *userServiceServer) DeleteUser(ctx context.Context, req *pb.DeleteUserRequest) (*pb.DeleteUserResponse, error) {
 	// 1. Validate input
 	if req.Id <= 0 {
-		return nil, status.Errorf(codes.InvalidArgument, "User id must be positive")
+		return nil, status.Error(codes.InvalidArgument, "user ID must be positive")
 	}
+
 	// 2. Delete user
 	err := s.repo.Delete(ctx, req.Id)
 	if err != nil {
-		if err.Error() == "no rows in result set" {
-			return nil, status.Errorf(codes.NotFound, "User with ID %d not found", req.Id)
+		if strings.Contains(err.Error(), errNoRows) {
+			return nil, status.Errorf(codes.NotFound, "user with ID %d not found", req.Id)
 		}
 		return nil, status.Errorf(codes.Internal, "failed to delete user: %v", err)
 	}
+
 	return &pb.DeleteUserResponse{Success: true}, nil
 }
 
-// ListUsers implement RPC ListUsers
+// ListUsers retrieves a paginated list of users
 func (s *userServiceServer) ListUsers(ctx context.Context, req *pb.ListUsersRequest) (*pb.ListUsersResponse, error) {
-	// 1. Validate pagination params
+	// 1. Validate and normalize pagination parameters
 	pageSize := req.PageSize
 	pageNumber := req.Page
 
-	// Calculate limit and offset from page_size and page_number
 	if pageSize <= 0 {
-		pageSize = 10 // Default page size
+		pageSize = defaultPageSize
 	}
-	if pageSize > 100 {
-		return nil, status.Errorf(codes.InvalidArgument, "page_size too large, max 100, got %d", pageSize)
+	if pageSize > maxPageSize {
+		return nil, status.Errorf(codes.InvalidArgument, "page_size too large, max %d, got %d", maxPageSize, pageSize)
 	}
 	if pageNumber < 0 {
 		return nil, status.Errorf(codes.InvalidArgument, "page_number must be non-negative, got %d", pageNumber)
 	}
 
-	// Convert page_number to offset
-	// page_number 0 = first page (offset 0)
-	// page_number 1 = second page (offset = page_size)
+	// Calculate offset (page_number 0 = first page with offset 0)
 	offset := pageNumber * pageSize
 
-	// 2. Call repository
+	// 2. Retrieve users from repository
 	users, total, err := s.repo.List(ctx, pageSize, offset)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to list users: %v", err)
 	}
 
-	// 3. Build response
+	// 3. Build and return response
 	return &pb.ListUsersResponse{
 		User:  users,
 		Total: total,
 	}, nil
 }
 
-// Login implement RPC Login
+// Login authenticates a user and returns JWT tokens
 func (s *userServiceServer) Login(ctx context.Context, req *pb.LoginRequest) (*pb.LoginResponse, error) {
 	// 1. Validate input
 	if req.Email == "" {
-		return nil, status.Errorf(codes.InvalidArgument, "Email is required")
+		return nil, status.Error(codes.InvalidArgument, "email is required")
 	}
 	if req.Password == "" {
-		return nil, status.Errorf(codes.InvalidArgument, "Password is required")
+		return nil, status.Error(codes.InvalidArgument, "password is required")
 	}
 
 	// 2. Get user by email with password hash
 	userWithPassword, err := s.repo.GetByEmailWithPassword(ctx, req.Email)
 	if err != nil {
-		if containsString(err.Error(), "no rows") {
-			return nil, status.Errorf(codes.NotFound, "Invalid email or password")
+		if strings.Contains(err.Error(), errNoRows) {
+			return nil, status.Error(codes.Unauthenticated, "invalid email or password")
 		}
-		return nil, status.Errorf(codes.Internal, "Failed to get user: %v", err)
+		return nil, status.Errorf(codes.Internal, "failed to get user: %v", err)
 	}
 
-	// 3. Check password
+	// 3. Verify password
 	if !auth.CheckPassword(req.Password, userWithPassword.PasswordHash) {
-		return nil, status.Errorf(codes.Unauthenticated, "Invalid email or password")
+		return nil, status.Error(codes.Unauthenticated, "invalid email or password")
 	}
 
-	// 4. Generate tokens
+	// 4. Generate access and refresh tokens
 	accessToken, err := auth.GenerateToken(userWithPassword.User.Id, userWithPassword.User.Email)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "Failed to generate access token: %v", err)
+		return nil, status.Errorf(codes.Internal, "failed to generate access token: %v", err)
 	}
 
 	refreshToken, err := auth.GenerateRefreshToken(userWithPassword.User.Id, userWithPassword.User.Email)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "Failed to generate refresh token: %v", err)
+		return nil, status.Errorf(codes.Internal, "failed to generate refresh token: %v", err)
 	}
 
-	// 5. Return response
+	// 5. Return successful login response
 	return &pb.LoginResponse{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
 		User:         userWithPassword.User,
-		Message:      "Login successful",
+		Message:      "login successful",
 	}, nil
 }
 
-// ValidateToken implement RPC ValidateToken
+// ValidateToken verifies JWT token validity and returns claims
 func (s *userServiceServer) ValidateToken(ctx context.Context, req *pb.ValidateTokenRequest) (*pb.ValidateTokenResponse, error) {
 	// 1. Validate input
 	if req.Token == "" {
-		return nil, status.Errorf(codes.InvalidArgument, "Token is required")
+		return nil, status.Error(codes.InvalidArgument, "token is required")
 	}
 
-	// 2. Validate token
+	// 2. Validate and parse token
 	claims, err := auth.ValidateToken(req.Token)
 	if err != nil {
 		return &pb.ValidateTokenResponse{
 			Valid:   false,
-			Message: "Invalid or expired token",
+			Message: "invalid or expired token",
 		}, nil
 	}
 
-	// 3. Return response
+	// 3. Return validation result with claims
 	return &pb.ValidateTokenResponse{
 		Valid:   true,
 		UserId:  claims.UserID,
 		Email:   claims.Email,
-		Message: "Token is valid",
+		Message: "token is valid",
 	}, nil
 }
 
-// Logout implement RPC Logout
+// Logout handles user logout (stateless JWT)
+// Note: For stateless JWT, logout is handled client-side by removing the token.
+// In production, consider implementing a token blacklist using Redis for added security.
 func (s *userServiceServer) Logout(ctx context.Context, req *pb.LogoutRequest) (*pb.LogoutResponse, error) {
-	// For stateless JWT, logout is handled client-side by removing the token
-	// In production, you might want to implement token blacklist using Redis
-
 	return &pb.LogoutResponse{
 		Success: true,
-		Message: "Logout successful. Please remove token from client.",
+		Message: "logout successful, please remove token from client",
 	}, nil
 }
