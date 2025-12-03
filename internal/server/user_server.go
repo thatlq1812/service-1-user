@@ -17,7 +17,6 @@ import (
 const (
 	defaultPageSize    = 10
 	maxPageSize        = 100
-	errNoRows          = "no rows in result set"
 	errDuplicateKey    = "duplicate"
 	errUniqueViolation = "unique"
 )
