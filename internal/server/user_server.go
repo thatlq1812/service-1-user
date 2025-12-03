@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"google.golang.org/grpc/codes"
@@ -42,7 +43,7 @@ func (s *userServiceServer) GetUser(ctx context.Context, req *pb.GetUserRequest)
 
 	user, err := s.repo.GetByID(ctx, req.Id)
 	if err != nil {
-		if strings.Contains(err.Error(), errNoRows) {
+		if errors.Is(err, repository.ErrUserNotFound) {
 			return nil, status.Errorf(codes.NotFound, "user with ID %d not found", req.Id)
 		}
 		return nil, status.Errorf(codes.Internal, "failed to get user: %v", err)
@@ -129,7 +130,7 @@ func (s *userServiceServer) UpdateUser(ctx context.Context, req *pb.UpdateUserRe
 	// 3. Update user
 	user, err := s.repo.Update(ctx, req.Id, req.Name, req.Email)
 	if err != nil {
-		if strings.Contains(err.Error(), errNoRows) {
+		if errors.Is(err, repository.ErrUserNotFound) {
 			return nil, status.Errorf(codes.NotFound, "user with ID %d not found", req.Id)
 		}
 		if isDuplicateError(err) {
@@ -151,7 +152,7 @@ func (s *userServiceServer) DeleteUser(ctx context.Context, req *pb.DeleteUserRe
 	// 2. Delete user
 	err := s.repo.Delete(ctx, req.Id)
 	if err != nil {
-		if strings.Contains(err.Error(), errNoRows) {
+		if errors.Is(err, repository.ErrUserNotFound) {
 			return nil, status.Errorf(codes.NotFound, "user with ID %d not found", req.Id)
 		}
 		return nil, status.Errorf(codes.Internal, "failed to delete user: %v", err)
@@ -205,7 +206,7 @@ func (s *userServiceServer) Login(ctx context.Context, req *pb.LoginRequest) (*p
 	// 2. Get user by email with password hash
 	userWithPassword, err := s.repo.GetByEmailWithPassword(ctx, req.Email)
 	if err != nil {
-		if strings.Contains(err.Error(), errNoRows) {
+		if errors.Is(err, repository.ErrUserNotFound) {
 			return nil, status.Error(codes.Unauthenticated, "invalid email or password")
 		}
 		return nil, status.Errorf(codes.Internal, "failed to get user: %v", err)

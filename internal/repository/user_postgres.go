@@ -2,11 +2,14 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	pb "service-1-user/proto"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -39,6 +42,11 @@ func (r *userPostgresRepo) GetByID(ctx context.Context, id int32) (*pb.User, err
 	)
 
 	if err != nil {
+		// No row
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrUserNotFound
+		}
+
 		return nil, fmt.Errorf("Query user failed: %w", err)
 	}
 
@@ -67,6 +75,10 @@ func (r *userPostgresRepo) Create(ctx context.Context, name, email string) (*pb.
 	)
 
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return nil, ErrEmailDuplicate
+		}
 		return nil, fmt.Errorf("Insert user failed: %w", err)
 	}
 
@@ -96,6 +108,9 @@ func (r *userPostgresRepo) GetByEmailWithPassword(ctx context.Context, email str
 	)
 
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrUserNotFound
+		}
 		return nil, fmt.Errorf("Query user by email failed: %w", err)
 	}
 
@@ -127,6 +142,12 @@ func (r *userPostgresRepo) CreateWithPassword(ctx context.Context, name, email, 
 	)
 
 	if err != nil {
+		var pgErr *pgconn.PgError
+
+		if errors.Is(err, pgx.errNoRows) {
+			return nil, ErrUserNotFound
+		}
+
 		return nil, fmt.Errorf("Insert user with password failed: %w", err)
 	}
 
