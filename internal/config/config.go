@@ -27,7 +27,7 @@ func Load() *Config {
 		ShutdownTimeout: common.GetEnvDuration("SHUTDOWN_TIMEOUT", 10*time.Second),
 
 		// JWT Config
-		JWTSecret:            common.GetEnvString("JWT_SECRET", "insecure-default-secret-change-this"), // default value for Dev
+		JWTSecret:            common.GetEnvString("JWT_SECRET", ""), //
 		AccessTokenDuration:  common.GetEnvDuration("ACCESS_TOKEN_DURATION", 24*time.Hour),
 		RefreshTokenDuration: common.GetEnvDuration("REFRESH_TOKEN_DURATION", 7*24*time.Hour),
 
