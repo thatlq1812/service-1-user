@@ -143,9 +143,8 @@ func (r *userPostgresRepo) CreateWithPassword(ctx context.Context, name, email, 
 
 	if err != nil {
 		var pgErr *pgconn.PgError
-
-		if errors.Is(err, pgx.errNoRows) {
-			return nil, ErrUserNotFound
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return nil, ErrEmailDuplicate
 		}
 
 		return nil, fmt.Errorf("Insert user with password failed: %w", err)
@@ -176,6 +175,13 @@ func (r *userPostgresRepo) Update(ctx context.Context, id int32, name, email str
 	)
 
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrUserNotFound
+		}
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return nil, ErrEmailDuplicate
+		}
 		return nil, fmt.Errorf("Update user failed: %w", err)
 	}
 
@@ -195,7 +201,7 @@ func (r *userPostgresRepo) Delete(ctx context.Context, id int32) error {
 	}
 
 	if result.RowsAffected() == 0 {
-		return fmt.Errorf("No user found with ID %d", id)
+		return ErrUserNotFound
 	}
 
 	return nil
