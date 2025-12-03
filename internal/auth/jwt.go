@@ -37,7 +37,7 @@ func (m *TokenManager) GenerateToken(userID int32, email string) (string, error)
 		Email:  email,
 		RegisteredClaims: jwt.RegisteredClaims{
 			// Use config from struct
-			ExpiresAt: jwt.NewNumericDate(now.Add(m.refreshTokenDuration)),
+			ExpiresAt: jwt.NewNumericDate(now.Add(m.accessTokenDuration)),
 			IssuedAt:  jwt.NewNumericDate(now),
 		},
 	}
