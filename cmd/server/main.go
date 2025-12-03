@@ -26,6 +26,14 @@ func main() {
 	// 1. Load configuration
 	cfg := config.Load()
 
+	// Setup redis
+	redisClient, err := db.NewRedisClient(cfg.Redis)
+	if err != nil {
+		log.Fatalf("Failed to connect to Redis: %v", err)
+	}
+	defer redisClient.Close()
+	log.Println("Connected to Redis successfully")
+
 	// 2. Setup database connection pool
 	pool, err := db.NewPostgresPool(cfg.DB)
 	if err != nil {
@@ -41,6 +49,7 @@ func main() {
 		cfg.JWTSecret,
 		cfg.AccessTokenDuration,
 		cfg.RefreshTokenDuration,
+		redisClient,
 	)
 
 	// 4. Setup gRPC server

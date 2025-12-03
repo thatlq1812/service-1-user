@@ -246,7 +246,7 @@ func (s *userServiceServer) ValidateToken(ctx context.Context, req *pb.ValidateT
 	}
 
 	// 2. Validate and parse token
-	claims, err := s.tokenManager.ValidateToken(req.Token)
+	claims, err := s.tokenManager.ValidateToken(ctx, req.Token)
 	if err != nil {
 		return &pb.ValidateTokenResponse{
 			Valid:   false,
@@ -267,8 +267,20 @@ func (s *userServiceServer) ValidateToken(ctx context.Context, req *pb.ValidateT
 // Note: For stateless JWT, logout is handled client-side by removing the token.
 // In production, consider implementing a token blacklist using Redis for added security.
 func (s *userServiceServer) Logout(ctx context.Context, req *pb.LogoutRequest) (*pb.LogoutResponse, error) {
+	// validate input
+	if req.Token == "" {
+		return nil, status.Error(codes.InvalidArgument, "token is required")
+	}
+
+	// invalidate token
+	err := s.tokenManager.InvalidateToken(ctx, req.Token)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to logout: %v", err)
+	}
+
 	return &pb.LogoutResponse{
 		Success: true,
-		Message: "logout successful, please remove token from client",
+		Message: "logout successful",
 	}, nil
+
 }

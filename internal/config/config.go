@@ -16,7 +16,8 @@ type Config struct {
 	AccessTokenDuration  time.Duration
 	RefreshTokenDuration time.Duration
 
-	DB db.Config
+	Redis db.RedisConfig
+	DB    db.Config
 }
 
 func Load() *Config {
@@ -29,6 +30,12 @@ func Load() *Config {
 		JWTSecret:            common.GetEnvString("JWT_SECRET", "insecure-default-secret-change-this"), // default value for Dev
 		AccessTokenDuration:  common.GetEnvDuration("ACCESS_TOKEN_DURATION", 24*time.Hour),
 		RefreshTokenDuration: common.GetEnvDuration("REFRESH_TOKEN_DURATION", 7*24*time.Hour),
+
+		Redis: db.RedisConfig{
+			Addr:     common.GetEnvString("REDIS_ADDR", "localhost:6379"),
+			Password: common.GetEnvString("REDIS_PASSWORD", ""),
+			DB:       common.GetEnvInt("REDIS_DB", 0),
+		},
 
 		// Database Config
 		DB: db.Config{

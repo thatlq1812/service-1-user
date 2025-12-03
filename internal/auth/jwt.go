@@ -1,24 +1,29 @@
 package auth
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/redis/go-redis/v9"
 )
 
 type TokenManager struct {
 	secretKey            []byte
 	accessTokenDuration  time.Duration
 	refreshTokenDuration time.Duration
+	redisClient          *redis.Client
 }
 
 // Constructor
-func NewTokenManager(secret string, accessDuration, refreshDuration time.Duration) *TokenManager {
+func NewTokenManager(secret string, accessDuration, refreshDuration time.Duration, redisClient *redis.Client) *TokenManager {
 	return &TokenManager{
 		secretKey:            []byte(secret),
 		accessTokenDuration:  accessDuration,
 		refreshTokenDuration: refreshDuration,
+		redisClient:          redisClient,
 	}
 }
 
@@ -63,7 +68,18 @@ func (m *TokenManager) GenerateRefreshToken(userID int32, email string) (string,
 }
 
 // Validate token
-func (m *TokenManager) ValidateToken(tokenString string) (*Claims, error) {
+func (m *TokenManager) ValidateToken(ctx context.Context, tokenString string) (*Claims, error) {
+	// 1. Blacklist checking
+	key := "blacklist:" + tokenString
+	_, err := m.redisClient.Get(ctx, key).Result()
+	if err == nil {
+		// Key found = revoked token
+		return nil, errors.New("token has been revoked")
+	}
+	if err != redis.Nil {
+		return nil, fmt.Errorf("redis error: %w", err)
+	}
+
 	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, errors.New("unexpected signing method")
@@ -80,4 +96,35 @@ func (m *TokenManager) ValidateToken(tokenString string) (*Claims, error) {
 	}
 
 	return nil, errors.New("invalid token")
+}
+
+// InvalidateToken to blacklist
+func (m *TokenManager) InvalidateToken(ctx context.Context, tokenString string) error {
+	// 1. Parse token to get exp time without sign
+	token, _, err := new(jwt.Parser).ParseUnverified(tokenString, &Claims{})
+	if err != nil {
+		return err
+	}
+
+	claims, ok := token.Claims.(*Claims)
+	if !ok {
+		return errors.New("invalid token claims")
+	}
+
+	// 2.
+	timeRemaining := time.Until(claims.ExpiresAt.Time)
+	if timeRemaining <= 0 {
+		return nil
+	}
+
+	// 3. Save to redis
+	// Key: "blacklist:<token>"
+	// value: "revoked"
+	// TTL: timeRemaining
+	key := "blacklist:" + tokenString
+	err = m.redisClient.Set(ctx, key, "revoked", timeRemaining).Err()
+	if err != nil {
+		return err
+	}
+	return nil
 }
