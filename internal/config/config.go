@@ -10,7 +10,13 @@ import (
 type Config struct {
 	GRPCPort        string
 	ShutdownTimeout time.Duration
-	DB              db.Config
+
+	// JWT
+	JWTSecret            string
+	AccessTokenDuration  time.Duration
+	RefreshTokenDuration time.Duration
+
+	DB db.Config
 }
 
 func Load() *Config {
@@ -18,6 +24,11 @@ func Load() *Config {
 		// Server Config
 		GRPCPort:        common.GetEnvString("GRPC_PORT", "50051"),
 		ShutdownTimeout: common.GetEnvDuration("SHUTDOWN_TIMEOUT", 10*time.Second),
+
+		// JWT Config
+		JWTSecret:            common.GetEnvString("JWT_SECRET", "insecure-default-secret-change-this"), // default value for Dev
+		AccessTokenDuration:  common.GetEnvDuration("ACCESS_TOKEN_DURATION", 24*time.Hour),
+		RefreshTokenDuration: common.GetEnvDuration("REFRESH_TOKEN_DURATION", 7*24*time.Hour),
 
 		// Database Config
 		DB: db.Config{

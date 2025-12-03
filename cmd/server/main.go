@@ -9,6 +9,7 @@ import (
 	"google.golang.org/grpc/reflection"
 
 	"agrios/pkg/common"
+	"service-1-user/internal/auth"
 	"service-1-user/internal/config"
 	"service-1-user/internal/db"
 	"service-1-user/internal/repository"
@@ -36,11 +37,17 @@ func main() {
 	// 3. Create repository
 	userRepo := repository.NewUserPostgresRepository(pool)
 
+	tokenManager := auth.NewTokenManager(
+		cfg.JWTSecret,
+		cfg.AccessTokenDuration,
+		cfg.RefreshTokenDuration,
+	)
+
 	// 4. Setup gRPC server
 	grpcServer := grpc.NewServer()
 
 	// 5. Register service implementation
-	userService := server.NewUserServiceServer(userRepo)
+	userService := server.NewUserServiceServer(userRepo, tokenManager)
 	pb.RegisterUserServiceServer(grpcServer, userService)
 
 	// 6. Enable reflection for tools like grpcurl
