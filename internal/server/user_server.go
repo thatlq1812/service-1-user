@@ -24,13 +24,15 @@ const (
 // userServiceServer implements UserServiceServer interface
 type userServiceServer struct {
 	pb.UnimplementedUserServiceServer
-	repo repository.UserRepository
+	repo         repository.UserRepository
+	tokenManager *auth.TokenManager
 }
 
 // NewUserServiceServer create server
-func NewUserServiceServer(repo repository.UserRepository) pb.UserServiceServer {
+func NewUserServiceServer(repo repository.UserRepository, tokenManager *auth.TokenManager) pb.UserServiceServer {
 	return &userServiceServer{
-		repo: repo,
+		repo:         repo,
+		tokenManager: tokenManager,
 	}
 }
 
@@ -217,12 +219,12 @@ func (s *userServiceServer) Login(ctx context.Context, req *pb.LoginRequest) (*p
 	}
 
 	// 4. Generate access and refresh tokens
-	accessToken, err := auth.GenerateToken(userWithPassword.User.Id, userWithPassword.User.Email)
+	accessToken, err := s.tokenManager.GenerateToken(userWithPassword.User.Id, userWithPassword.User.Email)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to generate access token: %v", err)
 	}
 
-	refreshToken, err := auth.GenerateRefreshToken(userWithPassword.User.Id, userWithPassword.User.Email)
+	refreshToken, err := s.tokenManager.GenerateRefreshToken(userWithPassword.User.Id, userWithPassword.User.Email)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to generate refresh token: %v", err)
 	}
@@ -244,7 +246,7 @@ func (s *userServiceServer) ValidateToken(ctx context.Context, req *pb.ValidateT
 	}
 
 	// 2. Validate and parse token
-	claims, err := auth.ValidateToken(req.Token)
+	claims, err := s.tokenManager.ValidateToken(req.Token)
 	if err != nil {
 		return &pb.ValidateTokenResponse{
 			Valid:   false,
