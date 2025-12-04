@@ -38,7 +38,9 @@ message CreateUserRequest {
 }
 
 message CreateUserResponse {
-  User user = 1;
+  string code = 1;
+  string message = 2;
+  User user = 3;
 }
 
 message GetUserRequest {
@@ -46,7 +48,9 @@ message GetUserRequest {
 }
 
 message GetUserResponse {
-  User user = 1;
+  string code = 1;
+  string message = 2;
+  User user = 3;
 }
 
 message UpdateUserRequest {
@@ -57,7 +61,9 @@ message UpdateUserRequest {
 }
 
 message UpdateUserResponse {
-  User user = 1;
+  string code = 1;
+  string message = 2;  
+  User user = 3;
 }
 
 message DeleteUserRequest {
@@ -65,7 +71,9 @@ message DeleteUserRequest {
 }
 
 message DeleteUserResponse {
-  bool success = 1;
+  string code = 1;
+  string message = 2;
+  bool success = 3;
 }
 
 message ListUsersRequest {
@@ -74,10 +82,14 @@ message ListUsersRequest {
 }
 
 message ListUsersResponse {
-  repeated User user = 1;
-  int32 total = 2;
+  string code = 1;
+  string message = 2;
+  repeated User users = 3;
+  int64 total = 4;
+  int32 page = 5;
+  int32 size = 6;
+  bool has_more = 7;
 }
-
 
 
 // Authentication
@@ -87,10 +99,11 @@ message LoginRequest {
 }
 
 message LoginResponse {
-  string access_token = 1;
-  string refresh_token = 2;
-  User user = 3;
-  string message = 4;
+  string code = 1;
+  string message = 2;
+  string access_token = 3;
+  string refresh_token = 4;
+  User user = 5;
 }
 
 message ValidateTokenRequest {
@@ -98,10 +111,11 @@ message ValidateTokenRequest {
 }
 
 message ValidateTokenResponse {
-  bool valid = 1;
-  int32 user_id = 2;
-  string email = 3;
-  string message = 4;
+  string code = 1;
+  string message = 2;
+  bool valid = 3;
+  int64 user_id = 4;
+  string email = 5;
 }
 
 message LogoutRequest {
@@ -109,6 +123,7 @@ message LogoutRequest {
 }
 
 message LogoutResponse {
-  bool success = 1;
+  string code = 1;
   string message = 2;
+  bool success = 3;
 }

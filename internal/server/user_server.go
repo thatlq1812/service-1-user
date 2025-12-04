@@ -5,9 +5,6 @@ import (
 	"errors"
 	"strings"
 
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-
 	"agrios/pkg/common"
 	"service-1-user/internal/auth"
 	"service-1-user/internal/repository"
@@ -38,67 +35,105 @@ func NewUserServiceServer(repo repository.UserRepository, tokenManager *auth.Tok
 
 // GetUser retrieves a user by ID
 func (s *userServiceServer) GetUser(ctx context.Context, req *pb.GetUserRequest) (*pb.GetUserResponse, error) {
-	if req.Id <= 0 {
-		return nil, status.Errorf(codes.InvalidArgument, "user ID must be positive, got %d", req.Id)
+	if req.Id < 0 {
+		return &pb.GetUserResponse{
+			Code:    common.CodeInvalidArgument,
+			Message: "user ID must be positive",
+		}, nil
 	}
 
 	user, err := s.repo.GetByID(ctx, req.Id)
 	if err != nil {
 		if errors.Is(err, repository.ErrUserNotFound) {
-			return nil, status.Errorf(codes.NotFound, "user with ID %d not found", req.Id)
+			return &pb.GetUserResponse{
+				Code:    common.CodeNotFound,
+				Message: "user not found",
+			}, nil
 		}
-		return nil, status.Errorf(codes.Internal, "failed to get user: %v", err)
+		return &pb.GetUserResponse{
+			Code:    common.CodeInternal,
+			Message: "failed to get user",
+		}, nil
 	}
 
-	return &pb.GetUserResponse{User: user}, nil
+	return &pb.GetUserResponse{
+		Code:    common.CodeSuccess,
+		Message: "success",
+		User:    user,
+	}, nil
 }
 
 // CreateUser creates a new user with optional password
 func (s *userServiceServer) CreateUser(ctx context.Context, req *pb.CreateUserRequest) (*pb.CreateUserResponse, error) {
 	// 1. Validate input
 	if req.Name == "" {
-		return nil, status.Error(codes.InvalidArgument, "name is required")
+		return &pb.CreateUserResponse{
+			Code:    common.CodeInvalidArgument,
+			Message: "name is required",
+		}, nil
 	}
+
 	if req.Email == "" {
-		return nil, status.Error(codes.InvalidArgument, "email is required")
+		return &pb.CreateUserResponse{
+			Code:    common.CodeInvalidArgument,
+			Message: "email is required",
+		}, nil
 	}
 
-	// 2. Validate email format
 	if !common.IsValidEmail(req.Email) {
-		return nil, status.Errorf(codes.InvalidArgument, "invalid email format: %s", req.Email)
+		return &pb.CreateUserResponse{
+			Code:    common.CodeInvalidArgument,
+			Message: "invalid email format",
+		}, nil
 	}
 
-	// 3. Hash password if provided and create user
 	var user *pb.User
 	var err error
 
 	if req.Password != "" {
-		// Hash the password
 		passwordHash, err := auth.HashPassword(req.Password)
 		if err != nil {
-			return nil, status.Errorf(codes.Internal, "failed to hash password: %v", err)
+			return &pb.CreateUserResponse{
+				Code:    common.CodeInternal,
+				Message: "failed to hash password",
+			}, nil
 		}
 
-		// Create user with password
 		user, err = s.repo.CreateWithPassword(ctx, req.Name, req.Email, passwordHash)
 		if err != nil {
 			if isDuplicateError(err) {
-				return nil, status.Errorf(codes.AlreadyExists, "email %s is already registered", req.Email)
+				return &pb.CreateUserResponse{
+					Code:    common.CodeAlreadyExists,
+					Message: "email is already registered",
+				}, nil
 			}
-			return nil, status.Errorf(codes.Internal, "failed to create user: %v", err)
+			return &pb.CreateUserResponse{
+				Code:    common.CodeInternal,
+				Message: "email is already registered",
+			}, nil
 		}
 	} else {
 		// Create user without password (legacy support)
 		user, err = s.repo.Create(ctx, req.Name, req.Email)
 		if err != nil {
 			if isDuplicateError(err) {
-				return nil, status.Errorf(codes.AlreadyExists, "email %s is already registered", req.Email)
+				return &pb.CreateUserResponse{
+					Code:    common.CodeAlreadyExists,
+					Message: "email is already registered",
+				}, nil
 			}
-			return nil, status.Errorf(codes.Internal, "failed to create user: %v", err)
+			return &pb.CreateUserResponse{
+				Code:    common.CodeInternal,
+				Message: "failed to create user",
+			}, nil
 		}
 	}
 
-	return &pb.CreateUserResponse{User: user}, nil
+	return &pb.CreateUserResponse{
+		Code:    common.CodeSuccess,
+		Message: "success",
+		User:    user,
+	}, nil
 }
 
 // isDuplicateError checks if error is related to duplicate key constraint violation
@@ -113,53 +148,90 @@ func isDuplicateError(err error) bool {
 // UpdateUser updates user information
 func (s *userServiceServer) UpdateUser(ctx context.Context, req *pb.UpdateUserRequest) (*pb.UpdateUserResponse, error) {
 	// 1. Validate input
-	if req.Id <= 0 {
-		return nil, status.Error(codes.InvalidArgument, "user ID must be positive")
+	if req.Id < 0 {
+		return &pb.UpdateUserResponse{
+			Code:    common.CodeInvalidArgument,
+			Message: "user ID must be positive",
+		}, nil
 	}
 	if req.Name == "" {
-		return nil, status.Error(codes.InvalidArgument, "name is required")
+		return &pb.UpdateUserResponse{
+			Code:    common.CodeInvalidArgument,
+			Message: "name is required",
+		}, nil
 	}
 	if req.Email == "" {
-		return nil, status.Error(codes.InvalidArgument, "email is required")
+		return &pb.UpdateUserResponse{
+			Code:    common.CodeInvalidArgument,
+			Message: "invalid email format",
+		}, nil
 	}
 
-	// 2. Validate email format
 	if !common.IsValidEmail(req.Email) {
-		return nil, status.Errorf(codes.InvalidArgument, "invalid email format: %s", req.Email)
+		return &pb.UpdateUserResponse{
+			Code:    common.CodeInvalidArgument,
+			Message: "invalid email format",
+		}, nil
 	}
 
 	// 3. Update user
 	user, err := s.repo.Update(ctx, req.Id, req.Name, req.Email)
 	if err != nil {
 		if errors.Is(err, repository.ErrUserNotFound) {
-			return nil, status.Errorf(codes.NotFound, "user with ID %d not found", req.Id)
+			return &pb.UpdateUserResponse{
+				Code:    common.CodeNotFound,
+				Message: "user not found",
+			}, nil
 		}
 		if isDuplicateError(err) {
-			return nil, status.Errorf(codes.AlreadyExists, "email %s is already registered", req.Email)
+			return &pb.UpdateUserResponse{
+				Code:    common.CodeAlreadyExists,
+				Message: "email is already registered",
+			}, nil
 		}
-		return nil, status.Errorf(codes.Internal, "failed to update user: %v", err)
+		return &pb.UpdateUserResponse{
+			Code:    common.CodeInternal,
+			Message: "failed to update user",
+		}, nil
 	}
 
-	return &pb.UpdateUserResponse{User: user}, nil
+	return &pb.UpdateUserResponse{
+		Code:    common.CodeSuccess,
+		Message: "success",
+		User:    user,
+	}, nil
 }
 
 // DeleteUser deletes a user by ID
 func (s *userServiceServer) DeleteUser(ctx context.Context, req *pb.DeleteUserRequest) (*pb.DeleteUserResponse, error) {
 	// 1. Validate input
 	if req.Id <= 0 {
-		return nil, status.Error(codes.InvalidArgument, "user ID must be positive")
+		return &pb.DeleteUserResponse{
+			Code:    common.CodeInvalidArgument,
+			Message: "user ID must be positive",
+		}, nil
 	}
 
 	// 2. Delete user
 	err := s.repo.Delete(ctx, req.Id)
 	if err != nil {
 		if errors.Is(err, repository.ErrUserNotFound) {
-			return nil, status.Errorf(codes.NotFound, "user with ID %d not found", req.Id)
+			return &pb.DeleteUserResponse{
+				Code:    common.CodeNotFound,
+				Message: "user not found",
+			}, nil
 		}
-		return nil, status.Errorf(codes.Internal, "failed to delete user: %v", err)
+		return &pb.DeleteUserResponse{
+			Code:    common.CodeInternal,
+			Message: "failed to delete user",
+		}, nil
 	}
 
-	return &pb.DeleteUserResponse{Success: true}, nil
+	return &pb.DeleteUserResponse{
+		Code:    common.CodeSuccess,
+		Message: "success",
+		Success: true,
+	}, nil
 }
 
 // ListUsers retrieves a paginated list of users
@@ -172,10 +244,16 @@ func (s *userServiceServer) ListUsers(ctx context.Context, req *pb.ListUsersRequ
 		pageSize = defaultPageSize
 	}
 	if pageSize > maxPageSize {
-		return nil, status.Errorf(codes.InvalidArgument, "page_size too large, max %d, got %d", maxPageSize, pageSize)
+		return &pb.ListUsersResponse{
+			Code:    common.CodeInvalidArgument,
+			Message: "page_size too large",
+		}, nil
 	}
 	if pageNumber < 0 {
-		return nil, status.Errorf(codes.InvalidArgument, "page_number must be non-negative, got %d", pageNumber)
+		return &pb.ListUsersResponse{
+			Code:    common.CodeInvalidArgument,
+			Message: "page_number must be non-negative",
+		}, nil
 	}
 
 	// Calculate offset (page_number 0 = first page with offset 0)
@@ -184,13 +262,24 @@ func (s *userServiceServer) ListUsers(ctx context.Context, req *pb.ListUsersRequ
 	// 2. Retrieve users from repository
 	users, total, err := s.repo.List(ctx, pageSize, offset)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to list users: %v", err)
+		return &pb.ListUsersResponse{
+			Code:    common.CodeInternal,
+			Message: "failed to list users",
+		}, nil
 	}
 
-	// 3. Build and return response
+	// 3. Calculate has_more
+	hasMore := int64(pageNumber+1)*int64(pageSize) < int64(total)
+
+	// 4. Build and return response
 	return &pb.ListUsersResponse{
-		User:  users,
-		Total: total,
+		Code:    common.CodeSuccess,
+		Message: "success",
+		Users:   users,
+		Total:   int64(total),
+		Page:    pageNumber,
+		Size:    pageSize,
+		HasMore: hasMore,
 	}, nil
 }
 
@@ -198,43 +287,65 @@ func (s *userServiceServer) ListUsers(ctx context.Context, req *pb.ListUsersRequ
 func (s *userServiceServer) Login(ctx context.Context, req *pb.LoginRequest) (*pb.LoginResponse, error) {
 	// 1. Validate input
 	if req.Email == "" {
-		return nil, status.Error(codes.InvalidArgument, "email is required")
+		return &pb.LoginResponse{
+			Code:    common.CodeInvalidArgument,
+			Message: "email is required",
+		}, nil
 	}
 	if req.Password == "" {
-		return nil, status.Error(codes.InvalidArgument, "password is required")
+		return &pb.LoginResponse{
+			Code:    common.CodeInvalidArgument,
+			Message: "password is required",
+		}, nil
 	}
 
 	// 2. Get user by email with password hash
 	userWithPassword, err := s.repo.GetByEmailWithPassword(ctx, req.Email)
 	if err != nil {
 		if errors.Is(err, repository.ErrUserNotFound) {
-			return nil, status.Error(codes.Unauthenticated, "invalid email or password")
+			return &pb.LoginResponse{
+				Code:    common.CodeUnauthorized,
+				Message: "invalid email or password",
+			}, nil
 		}
-		return nil, status.Errorf(codes.Internal, "failed to get user: %v", err)
+		return &pb.LoginResponse{
+			Code:    common.CodeInternal,
+			Message: "failed to get user",
+		}, nil
 	}
 
 	// 3. Verify password
 	if !auth.CheckPassword(req.Password, userWithPassword.PasswordHash) {
-		return nil, status.Error(codes.Unauthenticated, "invalid email or password")
+		return &pb.LoginResponse{
+			Code:    common.CodeUnauthorized,
+			Message: "invalid email or password",
+		}, nil
 	}
 
 	// 4. Generate access and refresh tokens
 	accessToken, err := s.tokenManager.GenerateToken(userWithPassword.User.Id, userWithPassword.User.Email)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to generate access token: %v", err)
+		return &pb.LoginResponse{
+			Code:    common.CodeInternal,
+			Message: "failed to generate access token",
+		}, nil
 	}
 
 	refreshToken, err := s.tokenManager.GenerateRefreshToken(userWithPassword.User.Id, userWithPassword.User.Email)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to generate refresh token: %v", err)
+		return &pb.LoginResponse{
+			Code:    common.CodeInternal,
+			Message: "failed to generate refresh token",
+		}, nil
 	}
 
 	// 5. Return successful login response
 	return &pb.LoginResponse{
+		Code:         common.CodeSuccess,
+		Message:      "success",
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
 		User:         userWithPassword.User,
-		Message:      "login successful",
 	}, nil
 }
 
@@ -242,24 +353,30 @@ func (s *userServiceServer) Login(ctx context.Context, req *pb.LoginRequest) (*p
 func (s *userServiceServer) ValidateToken(ctx context.Context, req *pb.ValidateTokenRequest) (*pb.ValidateTokenResponse, error) {
 	// 1. Validate input
 	if req.Token == "" {
-		return nil, status.Error(codes.InvalidArgument, "token is required")
+		return &pb.ValidateTokenResponse{
+			Code:    common.CodeInvalidArgument,
+			Message: "token is required",
+			Valid:   false,
+		}, nil
 	}
 
 	// 2. Validate and parse token
 	claims, err := s.tokenManager.ValidateToken(ctx, req.Token)
 	if err != nil {
 		return &pb.ValidateTokenResponse{
-			Valid:   false,
+			Code:    common.CodeUnauthorized,
 			Message: "invalid or expired token",
+			Valid:   false,
 		}, nil
 	}
 
 	// 3. Return validation result with claims
 	return &pb.ValidateTokenResponse{
+		Code:    common.CodeSuccess,
+		Message: "success",
 		Valid:   true,
-		UserId:  claims.UserID,
+		UserId:  int64(claims.UserID),
 		Email:   claims.Email,
-		Message: "token is valid",
 	}, nil
 }
 
@@ -269,18 +386,24 @@ func (s *userServiceServer) ValidateToken(ctx context.Context, req *pb.ValidateT
 func (s *userServiceServer) Logout(ctx context.Context, req *pb.LogoutRequest) (*pb.LogoutResponse, error) {
 	// validate input
 	if req.Token == "" {
-		return nil, status.Error(codes.InvalidArgument, "token is required")
+		return &pb.LogoutResponse{
+			Code:    common.CodeInvalidArgument,
+			Message: "token is required",
+		}, nil
 	}
 
 	// invalidate token
 	err := s.tokenManager.InvalidateToken(ctx, req.Token)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to logout: %v", err)
+		return &pb.LogoutResponse{
+			Code:    common.CodeInternal,
+			Message: "failed to logout",
+		}, nil
 	}
 
 	return &pb.LogoutResponse{
+		Code:    common.CodeSuccess,
+		Message: "success",
 		Success: true,
-		Message: "logout successful",
 	}, nil
-
 }
