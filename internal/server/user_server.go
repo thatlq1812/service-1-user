@@ -11,7 +11,6 @@ import (
 	pb "service-1-user/proto"
 
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 const (
@@ -39,15 +38,15 @@ func NewUserServiceServer(repo repository.UserRepository, tokenManager *auth.Tok
 // GetUser retrieves a user by ID
 func (s *userServiceServer) GetUser(ctx context.Context, req *pb.GetUserRequest) (*pb.GetUserResponse, error) {
 	if req.Id <= 0 {
-		return nil, status.Error(codes.InvalidArgument, "user ID must be positive")
+		return nil, response.GRPCError(codes.InvalidArgument, "User ID must be positive. Provide a valid ID greater than 0.")
 	}
 
 	user, err := s.repo.GetByID(ctx, req.Id)
 	if err != nil {
 		if errors.Is(err, repository.ErrUserNotFound) {
-			return nil, response.GRPCError(codes.NotFound, "user not found")
+			return nil, response.GRPCError(codes.NotFound, "User not found. Verify the user ID exists.")
 		}
-		return nil, response.GRPCError(codes.Internal, "failed to get user")
+		return nil, response.GRPCError(codes.Internal, "Failed to get user")
 	}
 
 	return response.GetUserSuccess(user), nil
@@ -57,15 +56,15 @@ func (s *userServiceServer) GetUser(ctx context.Context, req *pb.GetUserRequest)
 func (s *userServiceServer) CreateUser(ctx context.Context, req *pb.CreateUserRequest) (*pb.CreateUserResponse, error) {
 	// Validate input
 	if req.Name == "" {
-		return nil, status.Error(codes.InvalidArgument, "name is required")
+		return nil, response.GRPCError(codes.InvalidArgument, "Name is required. Provide a valid name.")
 	}
 
 	if req.Email == "" {
-		return nil, status.Error(codes.InvalidArgument, "email is required")
+		return nil, response.GRPCError(codes.InvalidArgument, "Email is required. Provide a valid email address.")
 	}
 
 	if !isValidEmail(req.Email) {
-		return nil, status.Error(codes.InvalidArgument, "invalid email format")
+		return nil, response.GRPCError(codes.InvalidArgument, "Invalid email format. Ensure the email contains '@' and a domain.")
 	}
 
 	var user *pb.User
@@ -74,24 +73,24 @@ func (s *userServiceServer) CreateUser(ctx context.Context, req *pb.CreateUserRe
 	if req.Password != "" {
 		passwordHash, err := auth.HashPassword(req.Password)
 		if err != nil {
-			return nil, status.Error(codes.Internal, "failed to hash password")
+			return nil, response.GRPCError(codes.Internal, "Failed to hash password")
 		}
 
 		user, err = s.repo.CreateWithPassword(ctx, req.Name, req.Email, passwordHash)
 		if err != nil {
 			if isDuplicateError(err) {
-				return nil, response.GRPCError(codes.AlreadyExists, "email is already registered")
+				return nil, response.GRPCError(codes.AlreadyExists, "Email is already registered. Please use a different email address.")
 			}
-			return nil, response.GRPCError(codes.Internal, "failed to create user")
+			return nil, response.GRPCError(codes.Internal, "Failed to create user"+err.Error())
 		}
 	} else {
 		// Create user without password (legacy support)
 		user, err = s.repo.Create(ctx, req.Name, req.Email)
 		if err != nil {
 			if isDuplicateError(err) {
-				return nil, response.GRPCError(codes.AlreadyExists, "email is already registered")
+				return nil, response.GRPCError(codes.AlreadyExists, "Email is already registered. Please use a different email address.")
 			}
-			return nil, response.GRPCError(codes.Internal, "failed to create user")
+			return nil, response.GRPCError(codes.Internal, "Failed to create user")
 		}
 	}
 
@@ -121,12 +120,12 @@ func isValidEmail(email string) bool {
 func (s *userServiceServer) UpdateUser(ctx context.Context, req *pb.UpdateUserRequest) (*pb.UpdateUserResponse, error) {
 	// Validate input
 	if req.Id <= 0 {
-		return nil, status.Error(codes.InvalidArgument, "user ID must be positive")
+		return nil, response.GRPCError(codes.InvalidArgument, "User ID must be positive. Provide a valid ID greater than 0.")
 	}
 
 	// At least one field must be provided
 	if req.Name == "" && req.Email == "" && req.Password == "" {
-		return nil, status.Error(codes.InvalidArgument, "at least one field must be provided for update")
+		return nil, response.GRPCError(codes.InvalidArgument, "At least one field must be provided for update")
 	}
 
 	// Prepare pointers for partial update
@@ -140,7 +139,7 @@ func (s *userServiceServer) UpdateUser(ctx context.Context, req *pb.UpdateUserRe
 	// Process email
 	if req.Email != "" {
 		if !isValidEmail(req.Email) {
-			return nil, status.Error(codes.InvalidArgument, "invalid email format")
+			return nil, response.GRPCError(codes.InvalidArgument, "Invalid email format")
 		}
 		email = &req.Email
 	}
@@ -149,7 +148,7 @@ func (s *userServiceServer) UpdateUser(ctx context.Context, req *pb.UpdateUserRe
 	if req.Password != "" {
 		hash, err := auth.HashPassword(req.Password)
 		if err != nil {
-			return nil, status.Error(codes.Internal, "failed to hash password")
+			return nil, response.GRPCError(codes.Internal, "Failed to hash password")
 		}
 		passwordHash = &hash
 	}
@@ -158,12 +157,12 @@ func (s *userServiceServer) UpdateUser(ctx context.Context, req *pb.UpdateUserRe
 	user, err := s.repo.PartialUpdate(ctx, req.Id, name, email, passwordHash)
 	if err != nil {
 		if errors.Is(err, repository.ErrUserNotFound) {
-			return nil, response.GRPCError(codes.NotFound, "user not found")
+			return nil, response.GRPCError(codes.NotFound, "User not found")
 		}
 		if errors.Is(err, repository.ErrEmailDuplicate) {
-			return nil, response.GRPCError(codes.AlreadyExists, "email is already registered")
+			return nil, response.GRPCError(codes.AlreadyExists, "Email is already registered")
 		}
-		return nil, response.GRPCError(codes.Internal, "failed to update user")
+		return nil, response.GRPCError(codes.Internal, "Failed to update user")
 	}
 
 	return response.UpdateUserSuccess(user), nil
@@ -173,16 +172,16 @@ func (s *userServiceServer) UpdateUser(ctx context.Context, req *pb.UpdateUserRe
 func (s *userServiceServer) DeleteUser(ctx context.Context, req *pb.DeleteUserRequest) (*pb.DeleteUserResponse, error) {
 	// Validate input
 	if req.Id <= 0 {
-		return nil, status.Error(codes.InvalidArgument, "user ID must be positive")
+		return nil, response.GRPCError(codes.InvalidArgument, "User ID must be positive")
 	}
 
 	// Delete user
 	err := s.repo.Delete(ctx, req.Id)
 	if err != nil {
 		if errors.Is(err, repository.ErrUserNotFound) {
-			return nil, response.GRPCError(codes.NotFound, "user not found")
+			return nil, response.GRPCError(codes.NotFound, "User not found")
 		}
-		return nil, response.GRPCError(codes.Internal, "failed to delete user")
+		return nil, response.GRPCError(codes.Internal, "Failed to delete user")
 	}
 
 	return response.DeleteUserSuccess(), nil
@@ -198,10 +197,10 @@ func (s *userServiceServer) ListUsers(ctx context.Context, req *pb.ListUsersRequ
 		pageSize = defaultPageSize
 	}
 	if pageSize > maxPageSize {
-		return nil, status.Error(codes.InvalidArgument, "page_size too large")
+		return nil, response.GRPCError(codes.InvalidArgument, "Page_size too large")
 	}
 	if pageNumber < 0 {
-		return nil, status.Error(codes.InvalidArgument, "page_number must be non-negative")
+		return nil, response.GRPCError(codes.InvalidArgument, "Page_number must be non-negative")
 	}
 
 	// Calculate offset (page_number 0 = first page with offset 0)
@@ -210,7 +209,7 @@ func (s *userServiceServer) ListUsers(ctx context.Context, req *pb.ListUsersRequ
 	// Retrieve users from repository
 	users, total, err := s.repo.List(ctx, pageSize, offset)
 	if err != nil {
-		return nil, response.GRPCError(codes.Internal, "failed to list users")
+		return nil, response.GRPCError(codes.Internal, "Failed to list users")
 	}
 
 	// Calculate has_more
@@ -224,35 +223,35 @@ func (s *userServiceServer) ListUsers(ctx context.Context, req *pb.ListUsersRequ
 func (s *userServiceServer) Login(ctx context.Context, req *pb.LoginRequest) (*pb.LoginResponse, error) {
 	// Validate input
 	if req.Email == "" {
-		return nil, status.Error(codes.InvalidArgument, "email is required")
+		return nil, response.GRPCError(codes.InvalidArgument, "Email is required")
 	}
 	if req.Password == "" {
-		return nil, status.Error(codes.InvalidArgument, "password is required")
+		return nil, response.GRPCError(codes.InvalidArgument, "Password is required")
 	}
 
 	// Get user by email with password hash
 	userWithPassword, err := s.repo.GetByEmailWithPassword(ctx, req.Email)
 	if err != nil {
 		if errors.Is(err, repository.ErrUserNotFound) {
-			return nil, status.Error(codes.Unauthenticated, "invalid email or password")
+			return nil, response.GRPCError(codes.Unauthenticated, "Invalid email or password")
 		}
-		return nil, status.Error(codes.Internal, "failed to get user")
+		return nil, response.GRPCError(codes.Internal, "Failed to get user")
 	}
 
 	// Verify password
 	if !auth.CheckPassword(req.Password, userWithPassword.PasswordHash) {
-		return nil, status.Error(codes.Unauthenticated, "invalid email or password")
+		return nil, response.GRPCError(codes.Unauthenticated, "Invalid email or password")
 	}
 
 	// Generate access and refresh tokens
 	accessToken, err := s.tokenManager.GenerateToken(userWithPassword.User.Id, userWithPassword.User.Email)
 	if err != nil {
-		return nil, response.GRPCError(codes.Internal, "failed to generate access token")
+		return nil, response.GRPCError(codes.Internal, "Failed to generate access token")
 	}
 
 	refreshToken, err := s.tokenManager.GenerateRefreshToken(userWithPassword.User.Id, userWithPassword.User.Email)
 	if err != nil {
-		return nil, response.GRPCError(codes.Internal, "failed to generate refresh token")
+		return nil, response.GRPCError(codes.Internal, "Failed to generate refresh token")
 	}
 
 	// Return successful login response
@@ -263,13 +262,13 @@ func (s *userServiceServer) Login(ctx context.Context, req *pb.LoginRequest) (*p
 func (s *userServiceServer) ValidateToken(ctx context.Context, req *pb.ValidateTokenRequest) (*pb.ValidateTokenResponse, error) {
 	// Validate input
 	if req.Token == "" {
-		return nil, status.Error(codes.InvalidArgument, "token is required")
+		return nil, response.GRPCError(codes.InvalidArgument, "Token is required")
 	}
 
 	// Validate and parse token
 	claims, err := s.tokenManager.ValidateToken(ctx, req.Token)
 	if err != nil {
-		return nil, response.GRPCError(codes.Unauthenticated, "invalid or expired token")
+		return nil, response.GRPCError(codes.Unauthenticated, "Invalid or expired token")
 	}
 
 	// Return validation result with claims
@@ -282,13 +281,13 @@ func (s *userServiceServer) ValidateToken(ctx context.Context, req *pb.ValidateT
 func (s *userServiceServer) Logout(ctx context.Context, req *pb.LogoutRequest) (*pb.LogoutResponse, error) {
 	// Validate input
 	if req.Token == "" {
-		return nil, status.Error(codes.InvalidArgument, "token is required")
+		return nil, response.GRPCError(codes.InvalidArgument, "Token is required")
 	}
 
 	// Invalidate token
 	err := s.tokenManager.InvalidateToken(ctx, req.Token)
 	if err != nil {
-		return nil, response.GRPCError(codes.Internal, "failed to logout")
+		return nil, response.GRPCError(codes.Internal, "Failed to logout")
 	}
 
 	return response.LogoutSuccess(), nil

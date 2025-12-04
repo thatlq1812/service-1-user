@@ -52,7 +52,7 @@ func MapGRPCCodeToString(code codes.Code) string {
 func CreateUserSuccess(user *pb.User) *pb.CreateUserResponse {
 	return &pb.CreateUserResponse{
 		Code:    CodeSuccess,
-		Message: "success",
+		Message: "User created successfully",
 		Data: &pb.CreateUserData{
 			User: user,
 		},
@@ -62,7 +62,7 @@ func CreateUserSuccess(user *pb.User) *pb.CreateUserResponse {
 func GetUserSuccess(user *pb.User) *pb.GetUserResponse {
 	return &pb.GetUserResponse{
 		Code:    CodeSuccess,
-		Message: "success",
+		Message: "User retrieved successfully",
 		Data: &pb.GetUserData{
 			User: user,
 		},
@@ -72,7 +72,7 @@ func GetUserSuccess(user *pb.User) *pb.GetUserResponse {
 func UpdateUserSuccess(user *pb.User) *pb.UpdateUserResponse {
 	return &pb.UpdateUserResponse{
 		Code:    CodeSuccess,
-		Message: "success",
+		Message: "User updated successfully",
 		Data: &pb.UpdateUserData{
 			User: user,
 		},
@@ -82,7 +82,7 @@ func UpdateUserSuccess(user *pb.User) *pb.UpdateUserResponse {
 func DeleteUserSuccess() *pb.DeleteUserResponse {
 	return &pb.DeleteUserResponse{
 		Code:    CodeSuccess,
-		Message: "success",
+		Message: "User deleted successfully",
 		Data: &pb.DeleteUserData{
 			Success: true,
 		},
@@ -92,7 +92,7 @@ func DeleteUserSuccess() *pb.DeleteUserResponse {
 func ListUsersSuccess(users []*pb.User, total int64, page, size int32, hasMore bool) *pb.ListUsersResponse {
 	return &pb.ListUsersResponse{
 		Code:    CodeSuccess,
-		Message: "success",
+		Message: "Users listed successfully",
 		Data: &pb.ListUsersData{
 			Users:   users,
 			Total:   total,
@@ -106,7 +106,7 @@ func ListUsersSuccess(users []*pb.User, total int64, page, size int32, hasMore b
 func LoginSuccess(accessToken, refreshToken string, user *pb.User) *pb.LoginResponse {
 	return &pb.LoginResponse{
 		Code:    CodeSuccess,
-		Message: "success",
+		Message: "Login successful",
 		Data: &pb.LoginData{
 			AccessToken:  accessToken,
 			RefreshToken: refreshToken,
@@ -118,7 +118,7 @@ func LoginSuccess(accessToken, refreshToken string, user *pb.User) *pb.LoginResp
 func ValidateTokenSuccess(valid bool, userID int64, email string) *pb.ValidateTokenResponse {
 	return &pb.ValidateTokenResponse{
 		Code:    CodeSuccess,
-		Message: "success",
+		Message: "Token validated successfully",
 		Data: &pb.ValidateTokenData{
 			Valid:  valid,
 			UserId: userID,
@@ -130,7 +130,7 @@ func ValidateTokenSuccess(valid bool, userID int64, email string) *pb.ValidateTo
 func LogoutSuccess() *pb.LogoutResponse {
 	return &pb.LogoutResponse{
 		Code:    CodeSuccess,
-		Message: "success",
+		Message: "Logout successful",
 		Data: &pb.LogoutData{
 			Success: true,
 		},
@@ -139,7 +139,24 @@ func LogoutSuccess() *pb.LogoutResponse {
 
 // Error response helper
 func GRPCError(code codes.Code, message string) error {
-	return status.Error(code, message)
+	// Add hints based on code
+	hint := ""
+	switch code {
+	case codes.InvalidArgument:
+		hint = " Check input parameters for validity."
+	case codes.NotFound:
+		hint = " Verify the resource ID exists."
+	case codes.Unauthenticated:
+		hint = " Provide valid authentication credentials."
+	case codes.PermissionDenied:
+		hint = " Ensure you have the required permissions."
+	case codes.Internal:
+		hint = " Contact support if the issue persists."
+	default:
+		hint = ""
+	}
+	fullMessage := message + hint
+	return status.Error(code, fullMessage)
 }
 
 // Error with custom code
