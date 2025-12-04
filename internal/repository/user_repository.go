@@ -19,8 +19,11 @@ type UserRepository interface {
 	// Create new user (legacy method without password)
 	Create(ctx context.Context, name, email string) (*pb.User, error)
 
-	// Update user information
+	// Update user information (full update)
 	Update(ctx context.Context, id int32, name, email string) (*pb.User, error)
+
+	// PartialUpdate user information (only provided fields)
+	PartialUpdate(ctx context.Context, id int32, name *string, email *string, password *string) (*pb.User, error)
 
 	// Delete user by ID
 	Delete(ctx context.Context, id int32) error

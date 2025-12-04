@@ -116,30 +116,51 @@ func isValidEmail(email string) bool {
 	return strings.Contains(email, "@") && strings.Contains(email, ".")
 }
 
-// UpdateUser updates user information
+// UpdateUser updates user information (partial update supported)
+// Only non-empty fields will be updated
 func (s *userServiceServer) UpdateUser(ctx context.Context, req *pb.UpdateUserRequest) (*pb.UpdateUserResponse, error) {
 	// Validate input
 	if req.Id <= 0 {
 		return nil, status.Error(codes.InvalidArgument, "user ID must be positive")
 	}
-	if req.Name == "" {
-		return nil, status.Error(codes.InvalidArgument, "name is required")
-	}
-	if req.Email == "" {
-		return nil, status.Error(codes.InvalidArgument, "email is required")
+
+	// At least one field must be provided
+	if req.Name == "" && req.Email == "" && req.Password == "" {
+		return nil, status.Error(codes.InvalidArgument, "at least one field must be provided for update")
 	}
 
-	if !isValidEmail(req.Email) {
-		return nil, status.Error(codes.InvalidArgument, "invalid email format")
+	// Prepare pointers for partial update
+	var name, email, passwordHash *string
+
+	// Process name
+	if req.Name != "" {
+		name = &req.Name
 	}
 
-	// Update user
-	user, err := s.repo.Update(ctx, req.Id, req.Name, req.Email)
+	// Process email
+	if req.Email != "" {
+		if !isValidEmail(req.Email) {
+			return nil, status.Error(codes.InvalidArgument, "invalid email format")
+		}
+		email = &req.Email
+	}
+
+	// Process password
+	if req.Password != "" {
+		hash, err := auth.HashPassword(req.Password)
+		if err != nil {
+			return nil, status.Error(codes.Internal, "failed to hash password")
+		}
+		passwordHash = &hash
+	}
+
+	// Update user with only provided fields
+	user, err := s.repo.PartialUpdate(ctx, req.Id, name, email, passwordHash)
 	if err != nil {
 		if errors.Is(err, repository.ErrUserNotFound) {
 			return nil, response.GRPCError(codes.NotFound, "user not found")
 		}
-		if isDuplicateError(err) {
+		if errors.Is(err, repository.ErrEmailDuplicate) {
 			return nil, response.GRPCError(codes.AlreadyExists, "email is already registered")
 		}
 		return nil, response.GRPCError(codes.Internal, "failed to update user")

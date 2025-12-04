@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	pb "service-1-user/proto"
@@ -188,6 +189,81 @@ func (r *userPostgresRepo) Update(ctx context.Context, id int32, name, email str
 
 	return &user, nil
 
+}
+
+// PartialUpdate updates only the provided fields
+func (r *userPostgresRepo) PartialUpdate(ctx context.Context, id int32, name *string, email *string, password *string) (*pb.User, error) {
+	// First, get current user to verify it exists
+	_, err := r.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	// Build dynamic query
+	updates := []string{}
+	args := []interface{}{}
+	argIndex := 1
+
+	if name != nil {
+		updates = append(updates, fmt.Sprintf("name = $%d", argIndex))
+		args = append(args, *name)
+		argIndex++
+	}
+
+	if email != nil {
+		updates = append(updates, fmt.Sprintf("email = $%d", argIndex))
+		args = append(args, *email)
+		argIndex++
+	}
+
+	if password != nil {
+		updates = append(updates, fmt.Sprintf("password_hash = $%d", argIndex))
+		args = append(args, *password)
+		argIndex++
+	}
+
+	// If no fields to update, return error
+	if len(updates) == 0 {
+		return nil, fmt.Errorf("no fields to update")
+	}
+
+	// Add updated_at
+	updates = append(updates, fmt.Sprintf("updated_at = NOW()"))
+
+	// Add ID to args
+	args = append(args, id)
+
+	// Build and execute query
+	query := fmt.Sprintf(`
+		UPDATE users
+		SET %s
+		WHERE id = $%d
+		RETURNING id, name, email, created_at, updated_at
+	`, strings.Join(updates, ", "), argIndex)
+
+	var updatedUser pb.User
+	var createdAt, updatedAt time.Time
+
+	err = r.db.QueryRow(ctx, query, args...).Scan(
+		&updatedUser.Id,
+		&updatedUser.Name,
+		&updatedUser.Email,
+		&createdAt,
+		&updatedAt,
+	)
+
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return nil, ErrEmailDuplicate
+		}
+		return nil, fmt.Errorf("PartialUpdate user failed: %w", err)
+	}
+
+	updatedUser.CreatedAt = createdAt.Format(time.RFC3339)
+	updatedUser.UpdatedAt = updatedAt.Format(time.RFC3339)
+
+	return &updatedUser, nil
 }
 
 // Delete implement method to delete user by ID
