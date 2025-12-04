@@ -165,7 +165,7 @@ psql -U postgres -d agrios_users -f migrations/001_create_users_table.sql
 
 ## Security Notes
 
-⚠️ **Important:**
+**Important:**
 - Change `JWT_SECRET` in production (use `openssl rand -base64 32`)
 - Use strong database passwords
 - Enable SSL/TLS for PostgreSQL and Redis in production
