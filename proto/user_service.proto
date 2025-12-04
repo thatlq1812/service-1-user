@@ -4,8 +4,6 @@ package user;
 
 option go_package = "service-1-user/proto";
 
-
-
 service UserService {
   rpc CreateUser (CreateUserRequest) returns (CreateUserResponse);
   rpc GetUser (GetUserRequest) returns (GetUserResponse);
@@ -13,13 +11,10 @@ service UserService {
   rpc DeleteUser (DeleteUserRequest) returns (DeleteUserResponse);
   rpc ListUsers (ListUsersRequest) returns (ListUsersResponse);
   
-  // Authentication methods
   rpc Login (LoginRequest) returns (LoginResponse);
   rpc ValidateToken (ValidateTokenRequest) returns (ValidateTokenResponse);
   rpc Logout (LogoutRequest) returns (LogoutResponse);
 }
-
-
 
 message User {
   int32 id = 1;
@@ -29,18 +24,20 @@ message User {
   string updated_at = 5;
 }
 
-
-
 message CreateUserRequest {
   string name = 1;
   string email = 2;
-  string password = 3; // Password for new user
+  string password = 3;
 }
 
 message CreateUserResponse {
   string code = 1;
   string message = 2;
-  User user = 3;
+  CreateUserData data = 3;
+}
+
+message CreateUserData {
+  User user = 1;
 }
 
 message GetUserRequest {
@@ -50,7 +47,11 @@ message GetUserRequest {
 message GetUserResponse {
   string code = 1;
   string message = 2;
-  User user = 3;
+  GetUserData data = 3;
+}
+
+message GetUserData {
+  User user = 1;
 }
 
 message UpdateUserRequest {
@@ -62,8 +63,12 @@ message UpdateUserRequest {
 
 message UpdateUserResponse {
   string code = 1;
-  string message = 2;  
-  User user = 3;
+  string message = 2;
+  UpdateUserData data = 3;
+}
+
+message UpdateUserData {
+  User user = 1;
 }
 
 message DeleteUserRequest {
@@ -73,7 +78,11 @@ message DeleteUserRequest {
 message DeleteUserResponse {
   string code = 1;
   string message = 2;
-  bool success = 3;
+  DeleteUserData data = 3;
+}
+
+message DeleteUserData {
+  bool success = 1;
 }
 
 message ListUsersRequest {
@@ -84,15 +93,17 @@ message ListUsersRequest {
 message ListUsersResponse {
   string code = 1;
   string message = 2;
-  repeated User users = 3;
-  int64 total = 4;
-  int32 page = 5;
-  int32 size = 6;
-  bool has_more = 7;
+  ListUsersData data = 3;
 }
 
+message ListUsersData {
+  repeated User users = 1;
+  int64 total = 2;
+  int32 page = 3;
+  int32 size = 4;
+  bool has_more = 5;
+}
 
-// Authentication
 message LoginRequest {
   string email = 1;
   string password = 2;
@@ -101,9 +112,13 @@ message LoginRequest {
 message LoginResponse {
   string code = 1;
   string message = 2;
-  string access_token = 3;
-  string refresh_token = 4;
-  User user = 5;
+  LoginData data = 3;
+}
+
+message LoginData {
+  string access_token = 1;
+  string refresh_token = 2;
+  User user = 3;
 }
 
 message ValidateTokenRequest {
@@ -113,9 +128,13 @@ message ValidateTokenRequest {
 message ValidateTokenResponse {
   string code = 1;
   string message = 2;
-  bool valid = 3;
-  int64 user_id = 4;
-  string email = 5;
+  ValidateTokenData data = 3;
+}
+
+message ValidateTokenData {
+  bool valid = 1;
+  int64 user_id = 2;
+  string email = 3;
 }
 
 message LogoutRequest {
@@ -125,5 +144,9 @@ message LogoutRequest {
 message LogoutResponse {
   string code = 1;
   string message = 2;
-  bool success = 3;
+  LogoutData data = 3;
+}
+
+message LogoutData {
+  bool success = 1;
 }

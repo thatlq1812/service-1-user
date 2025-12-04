@@ -87,6 +87,37 @@ func (r *userPostgresRepo) Create(ctx context.Context, name, email string) (*pb.
 	return &user, nil
 }
 
+// CreateWithPassword implement method to create new user with password
+func (r *userPostgresRepo) CreateWithPassword(ctx context.Context, name, email, passwordHash string) (*pb.User, error) {
+	query := `
+		INSERT INTO users (name, email, password_hash)
+		VALUES ($1, $2, $3)
+		RETURNING id, name, email, created_at
+	`
+
+	var user pb.User
+	var createdAt time.Time
+
+	err := r.db.QueryRow(ctx, query, name, email, passwordHash).Scan(
+		&user.Id,
+		&user.Name,
+		&user.Email,
+		&createdAt,
+	)
+
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return nil, ErrEmailDuplicate
+		}
+		return nil, fmt.Errorf("Insert user with password failed: %w", err)
+	}
+
+	user.CreatedAt = createdAt.Format(time.RFC3339)
+
+	return &user, nil
+}
+
 // GetByEmailWithPassword implement method to get user by email with password hash
 func (r *userPostgresRepo) GetByEmailWithPassword(ctx context.Context, email string) (*UserWithPassword, error) {
 	query := `
@@ -121,38 +152,6 @@ func (r *userPostgresRepo) GetByEmailWithPassword(ctx context.Context, email str
 		User:         &user,
 		PasswordHash: passwordHash,
 	}, nil
-}
-
-// CreateWithPassword implement method to create new user with password
-func (r *userPostgresRepo) CreateWithPassword(ctx context.Context, name, email, passwordHash string) (*pb.User, error) {
-	query := `
-		INSERT INTO users (name, email, password_hash)
-		VALUES ($1, $2, $3)
-		RETURNING id, name, email, created_at
-	`
-
-	var user pb.User
-	var createdAt time.Time
-
-	err := r.db.QueryRow(ctx, query, name, email, passwordHash).Scan(
-		&user.Id,
-		&user.Name,
-		&user.Email,
-		&createdAt,
-	)
-
-	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-			return nil, ErrEmailDuplicate
-		}
-
-		return nil, fmt.Errorf("Insert user with password failed: %w", err)
-	}
-
-	user.CreatedAt = createdAt.Format(time.RFC3339)
-
-	return &user, nil
 }
 
 // Update implement method for update user

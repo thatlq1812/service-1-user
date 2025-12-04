@@ -28,7 +28,7 @@ func Load() *Config {
 
 		// JWT Config
 		JWTSecret:            common.GetEnvString("JWT_SECRET", ""), //
-		AccessTokenDuration:  common.GetEnvDuration("ACCESS_TOKEN_DURATION", 24*time.Hour),
+		AccessTokenDuration:  common.GetEnvDuration("ACCESS_TOKEN_DURATION", 15*time.Minute),
 		RefreshTokenDuration: common.GetEnvDuration("REFRESH_TOKEN_DURATION", 7*24*time.Hour),
 
 		Redis: db.RedisConfig{

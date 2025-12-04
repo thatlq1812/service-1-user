@@ -1,0 +1,148 @@
+package response
+
+import (
+	pb "service-1-user/proto"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+)
+
+// Standard response codes mapping
+const (
+	CodeSuccess            = "000" // Success
+	CodeUnknownError       = "002" // Unknown error
+	CodeInvalidRequest     = "003" // Invalid request
+	CodeNotFound           = "005" // Not found
+	CodeAlreadyExists      = "006" // Already exists
+	CodePermissionDenied   = "007" // Permission denied
+	CodeInternalError      = "013" // Internal error
+	CodeUnauthenticated    = "014" // Authentication required
+	CodeServiceUnavailable = "015" // Service unavailable
+	CodeUnauthorized       = "016" // Unauthorized
+)
+
+// MapGRPCCodeToString converts gRPC status code to our standard string code
+func MapGRPCCodeToString(code codes.Code) string {
+	switch code {
+	case codes.OK:
+		return CodeSuccess
+	case codes.InvalidArgument:
+		return CodeInvalidRequest
+	case codes.NotFound:
+		return CodeNotFound
+	case codes.AlreadyExists:
+		return CodeAlreadyExists
+	case codes.PermissionDenied:
+		return CodePermissionDenied
+	case codes.Unauthenticated:
+		return CodeUnauthenticated
+	case codes.Internal:
+		return CodeInternalError
+	case codes.Unavailable:
+		return CodeServiceUnavailable
+	case codes.FailedPrecondition:
+		return CodeUnauthorized
+	default:
+		return CodeUnknownError
+	}
+}
+
+// User Service Response Helpers
+
+func CreateUserSuccess(user *pb.User) *pb.CreateUserResponse {
+	return &pb.CreateUserResponse{
+		Code:    CodeSuccess,
+		Message: "success",
+		Data: &pb.CreateUserData{
+			User: user,
+		},
+	}
+}
+
+func GetUserSuccess(user *pb.User) *pb.GetUserResponse {
+	return &pb.GetUserResponse{
+		Code:    CodeSuccess,
+		Message: "success",
+		Data: &pb.GetUserData{
+			User: user,
+		},
+	}
+}
+
+func UpdateUserSuccess(user *pb.User) *pb.UpdateUserResponse {
+	return &pb.UpdateUserResponse{
+		Code:    CodeSuccess,
+		Message: "success",
+		Data: &pb.UpdateUserData{
+			User: user,
+		},
+	}
+}
+
+func DeleteUserSuccess() *pb.DeleteUserResponse {
+	return &pb.DeleteUserResponse{
+		Code:    CodeSuccess,
+		Message: "success",
+		Data: &pb.DeleteUserData{
+			Success: true,
+		},
+	}
+}
+
+func ListUsersSuccess(users []*pb.User, total int64, page, size int32, hasMore bool) *pb.ListUsersResponse {
+	return &pb.ListUsersResponse{
+		Code:    CodeSuccess,
+		Message: "success",
+		Data: &pb.ListUsersData{
+			Users:   users,
+			Total:   total,
+			Page:    page,
+			Size:    size,
+			HasMore: hasMore,
+		},
+	}
+}
+
+func LoginSuccess(accessToken, refreshToken string, user *pb.User) *pb.LoginResponse {
+	return &pb.LoginResponse{
+		Code:    CodeSuccess,
+		Message: "success",
+		Data: &pb.LoginData{
+			AccessToken:  accessToken,
+			RefreshToken: refreshToken,
+			User:         user,
+		},
+	}
+}
+
+func ValidateTokenSuccess(valid bool, userID int64, email string) *pb.ValidateTokenResponse {
+	return &pb.ValidateTokenResponse{
+		Code:    CodeSuccess,
+		Message: "success",
+		Data: &pb.ValidateTokenData{
+			Valid:  valid,
+			UserId: userID,
+			Email:  email,
+		},
+	}
+}
+
+func LogoutSuccess() *pb.LogoutResponse {
+	return &pb.LogoutResponse{
+		Code:    CodeSuccess,
+		Message: "success",
+		Data: &pb.LogoutData{
+			Success: true,
+		},
+	}
+}
+
+// Error response helper
+func GRPCError(code codes.Code, message string) error {
+	return status.Error(code, message)
+}
+
+// Error with custom code
+func GRPCErrorWithCode(code codes.Code, message string) error {
+	return status.Error(code, message)
+}
