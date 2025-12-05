@@ -43,6 +43,9 @@ sleep 15
 # Verify
 docker logs agrios-user-service
 
+# Install grpcurl for testing (if not already installed)
+go install github.com/fullstorydev/grpcurl/cmd/grpcurl@latest
+
 # Test
 grpcurl -plaintext localhost:50051 list
 ```
@@ -50,8 +53,8 @@ grpcurl -plaintext localhost:50051 list
 ### Quick Start 2: Run User Service Only (Standalone)
 ```bash
 # Clone and setup
-git clone https://github.com/thatlq1812/agrios.git
-cd agrios/service-1-user
+git clone https://github.com/thatlq1812/service-1-user.git
+cd service-1-user
 
 # Configure (optional - defaults work fine)
 cp .env.example .env
@@ -62,6 +65,9 @@ sleep 15
 
 # Verify
 docker logs user-service-app
+
+# Install grpcurl for testing (if not already installed)
+go install github.com/fullstorydev/grpcurl/cmd/grpcurl@latest
 
 # Test
 grpcurl -plaintext localhost:50051 list
@@ -102,6 +108,10 @@ User Service handles authentication and user management for the Agrios platform.
 - Docker 20.10+
 - Docker Compose 1.29+
 - Git
+- Go 1.21+ (for grpcurl testing tool)
+- grpcurl (install: `go install github.com/fullstorydev/grpcurl/cmd/grpcurl@latest`)
+
+**Note:** grpcurl is needed to test gRPC services. Install it once, use for all services.
 
 ---
 
@@ -1376,6 +1386,87 @@ grpcurl -plaintext -d '{"id":1}' localhost:50051 user.UserService.DeleteUser
 
 # 3. Check existing users
 grpcurl -plaintext -d '{"page":1,"page_size":10}' localhost:50051 user.UserService.ListUsers
+```
+
+---
+
+### grpcurl Command Not Found
+
+**Problem:** `grpcurl: command not found` when testing
+
+**Solution:**
+```bash
+# Install grpcurl (requires Go)
+go install github.com/fullstorydev/grpcurl/cmd/grpcurl@latest
+
+# Verify installation
+grpcurl --version
+
+# If still not found, check Go bin path
+echo $GOPATH/bin
+# Add to PATH if needed:
+# Linux/Mac: export PATH=$PATH:$(go env GOPATH)/bin
+# Windows: Add %USERPROFILE%\go\bin to PATH
+
+# Alternative: Use Docker to run grpcurl
+docker run --rm -it --network=host fullstorydev/grpcurl \
+  -plaintext localhost:50051 list
+```
+
+---
+
+### errors.log File Created
+
+**Problem:** `errors.log` file appears in project directory
+
+**Explanation:**
+- This file is automatically created by the service for error logging
+- It's already in `.gitignore` and won't be committed
+- Safe to delete if not needed
+
+**Solutions:**
+```bash
+# View recent errors
+tail -f errors.log
+
+# Clear log file
+> errors.log
+
+# Delete log file
+rm errors.log
+
+# Disable file logging (edit main.go if needed)
+# Or set LOG_OUTPUT=stdout in .env
+```
+
+---
+
+### Container Name Conflicts
+
+**Problem:** `container name already in use`
+
+**Cause:** Running both root setup and standalone setup simultaneously
+
+**Solutions:**
+```bash
+# Check what's running
+docker ps -a | grep -E "user-service|agrios"
+
+# Option 1: Stop root setup
+cd agrios
+docker-compose down
+
+# Option 2: Stop standalone setup
+cd agrios/service-1-user
+docker-compose down
+
+# Option 3: Remove specific container
+docker rm -f user-service-app
+docker rm -f agrios-user-service
+
+# Clean everything and start fresh
+docker-compose down -v
+docker-compose up -d
 ```
 
 ---
