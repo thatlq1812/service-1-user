@@ -1551,16 +1551,3 @@ go tool cover -html=coverage.out
 ```
 
 ---
-
-## Additional Resources
-
-- **[Main Project README](../README.md)** - Complete platform documentation
-- **[Architecture Guide](../docs/ARCHITECTURE_GUIDE.md)** - System design
-- **[API Gateway](../service-3-gateway/README.md)** - REST API interface
-- **[Article Service](../service-2-article/README.md)** - Content service
-
----
-
-**Service Version:** 1.0.0  
-**Last Updated:** December 5, 2025  
-**Maintainer:** thatlq1812@gmail.com
