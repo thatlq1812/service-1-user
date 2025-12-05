@@ -1,0 +1,85 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database for User Service
+  postgres:
+    image: postgres:15-alpine
+    container_name: user-service-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: agrios_users
+    ports:
+      - "5432:5432"
+    volumes:
+      - user_postgres_data:/var/lib/postgresql/data
+      - ./migrations/001_create_users_table.sql:/docker-entrypoint-initdb.d/001_create_users_table.sql
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - user-service-network
+
+  # Redis Cache for User Service
+  redis:
+    image: redis:7-alpine
+    container_name: user-service-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - user-service-network
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # User Service (gRPC)
+  user-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: user-service-app
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_NAME=agrios_users
+      - DB_MAX_CONNS=10
+      - DB_MIN_CONNS=2
+      - DB_MAX_CONN_LIFETIME=1h
+      - DB_MAX_CONN_IDLE_TIME=30m
+      - DB_CONNECT_TIMEOUT=5s
+      - GRPC_PORT=50051
+      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
+      - ACCESS_TOKEN_DURATION=15m
+      - REFRESH_TOKEN_DURATION=168h
+      - REDIS_ADDR=redis:6379
+      - REDIS_PASSWORD=
+      - REDIS_DB=0
+    ports:
+      - "50051:50051"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - user-service-network
+    healthcheck:
+      test: [ "CMD", "nc", "-z", "localhost", "50051" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  user_postgres_data:
+    driver: local
+
+networks:
+  user-service-network:
+    driver: bridge

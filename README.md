@@ -25,8 +25,9 @@
 
 ## Quick Start
 
-**For new users cloning the project:**
+**For new users cloning the project, choose one:**
 
+### Quick Start 1: Run All Services (Recommended)
 ```bash
 # Clone and setup
 git clone https://github.com/thatlq1812/agrios.git
@@ -35,14 +36,32 @@ cd agrios
 # Configure (optional - defaults work fine)
 cp service-1-user/.env.example service-1-user/.env
 
-# Start services
+# Start all services (User + Article + Gateway)
 docker-compose up -d
-
-# Wait for initialization
 sleep 15
 
 # Verify
 docker logs agrios-user-service
+
+# Test
+grpcurl -plaintext localhost:50051 list
+```
+
+### Quick Start 2: Run User Service Only (Standalone)
+```bash
+# Clone and setup
+git clone https://github.com/thatlq1812/agrios.git
+cd agrios/service-1-user
+
+# Configure (optional - defaults work fine)
+cp .env.example .env
+
+# Start User Service only (with PostgreSQL + Redis)
+docker-compose up -d
+sleep 15
+
+# Verify
+docker logs user-service-app
 
 # Test
 grpcurl -plaintext localhost:50051 list
@@ -84,7 +103,11 @@ User Service handles authentication and user management for the Agrios platform.
 - Docker Compose 1.29+
 - Git
 
-**Quick Start from Scratch:**
+---
+
+#### Option 1A: Run from Project Root (All Services)
+
+Run User Service along with other services (Article Service, Gateway).
 
 ```bash
 # 1. Clone repository
@@ -100,6 +123,8 @@ cp service-1-user/.env.example service-1-user/.env
 #   - Pull and start PostgreSQL container (port 5432)
 #   - Pull and start Redis container (port 6379)
 #   - Build and start User Service container (port 50051)
+#   - Build and start Article Service container (port 50052)
+#   - Build and start Gateway container (port 8080)
 #   - Create databases and run migrations automatically
 docker-compose up -d
 
@@ -114,9 +139,54 @@ docker-compose ps
 # agrios-postgres        Up (healthy)   <- PostgreSQL database
 # agrios-redis           Up (healthy)   <- Redis cache
 # agrios-user-service    Up (healthy)   <- User Service (gRPC)
+# agrios-article-service Up (healthy)   <- Article Service
+# agrios-gateway         Up (healthy)   <- API Gateway
 
-# 6. View logs to confirm service is running
+# 6. View logs to confirm User Service is running
 docker logs agrios-user-service --tail 20
+
+# Expected output:
+# Connected to PostgreSQL successfully
+# Connected to Redis successfully
+# User Service (gRPC) listening on port 50051
+```
+
+---
+
+#### Option 1B: Run User Service Only (Standalone)
+
+Run only User Service independently without other services.
+
+```bash
+# 1. Clone repository
+git clone https://github.com/thatlq1812/agrios.git
+cd agrios/service-1-user
+
+# 2. Configure environment
+cp .env.example .env
+# Optional: Edit .env if needed
+
+# 3. Start User Service with its dependencies
+# This will start:
+#   - PostgreSQL container (port 5432)
+#   - Redis container (port 6379)
+#   - User Service container (port 50051)
+docker-compose up -d
+
+# 4. Wait for services to initialize
+sleep 15
+
+# 5. Check service status
+docker-compose ps
+
+# Expected output:
+# NAME                   STATUS
+# user-service-postgres  Up (healthy)
+# user-service-redis     Up (healthy)
+# user-service-app       Up (healthy)
+
+# 6. View logs
+docker logs user-service-app --tail 20
 
 # Expected output:
 # Connected to PostgreSQL successfully
@@ -129,6 +199,7 @@ docker logs agrios-user-service --tail 20
 - Database tables are created automatically from `migrations/001_create_users_table.sql`
 - All services run in isolated Docker containers with networking configured
 - Data persists in Docker volumes even after stopping containers
+- This standalone setup uses different container names to avoid conflicts with root setup
 
 **Database Migration:**
 
@@ -190,9 +261,27 @@ user-service:
     - REDIS_HOST=redis
 ```
 
-**Rebuild after code changes:**
+**Common Commands:**
+
 ```bash
+# Rebuild after code changes (from root)
+cd agrios
 docker-compose up -d --build user-service
+
+# Rebuild standalone (from service-1-user)
+cd agrios/service-1-user
+docker-compose up -d --build user-service
+
+# Stop services (from root)
+cd agrios
+docker-compose down
+
+# Stop standalone (from service-1-user)
+cd agrios/service-1-user
+docker-compose down
+
+# Remove volumes and clean data (from service-1-user)
+docker-compose down -v
 ```
 
 ---
@@ -1030,7 +1119,28 @@ grpcurl -plaintext \
 
 **Common issues and solutions:**
 
-1. **Docker not running**
+1. **"no configuration file provided: not found"**
+   ```bash
+   # This error occurs when running docker-compose from wrong directory
+   
+   # WRONG (from service-1-user without docker-compose.yml):
+   cd agrios/service-1-user
+   docker-compose up -d  # Error!
+   
+   # CORRECT Option 1 - Run from root:
+   cd agrios
+   docker-compose up -d
+   
+   # CORRECT Option 2 - Run standalone from service-1-user:
+   cd agrios/service-1-user
+   # Now there's a docker-compose.yml here
+   docker-compose up -d
+   
+   # Check if docker-compose.yml exists:
+   ls docker-compose.yml
+   ```
+
+2. **Docker not running**
    ```bash
    # Check Docker status
    docker ps
@@ -1067,8 +1177,15 @@ grpcurl -plaintext \
    lsof -i :50051
    
    # Solutions:
-   # - Stop conflicting services
-   # - Or change ports in docker-compose.yml
+   # Option 1: Stop conflicting services
+   # Option 2: Stop other Docker containers using same ports
+   docker ps  # Check running containers
+   docker stop <container-name>
+   
+   # Option 3: If running both root and standalone setup together
+   # They will conflict! Choose one:
+   cd agrios && docker-compose down           # Stop root setup
+   cd agrios/service-1-user && docker-compose down  # Stop standalone
    ```
 
 4. **Missing .env file**
