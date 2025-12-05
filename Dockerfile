@@ -2,16 +2,14 @@
 FROM golang:1.25-alpine AS builder
 
 WORKDIR /build
-
-# Copy service-1-user go.mod files
-COPY service-1-user/go.mod service-1-user/go.sum ./service-1-user/
+# Copy go.mod files (context is the service folder)
+COPY go.mod go.sum ./
 
 # Download dependencies
-WORKDIR /build/service-1-user
 RUN go mod download
 
-# Copy source code
-COPY service-1-user/ ./
+# Copy source code from current context into the build image
+COPY . ./
 
 # Build the application
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o user-service ./cmd/server/
@@ -24,10 +22,10 @@ RUN apk --no-cache add ca-certificates tzdata
 WORKDIR /app
 
 # Copy binary from builder
-COPY --from=builder /build/service-1-user/user-service .
+COPY --from=builder /build/user-service .
 
 # Copy migrations if needed
-COPY --from=builder /build/service-1-user/migrations ./migrations
+COPY --from=builder /build/migrations ./migrations
 
 # Expose gRPC port
 EXPOSE 50051
