@@ -95,19 +95,25 @@ cd agrios
 cp service-1-user/.env.example service-1-user/.env
 # Optional: Edit service-1-user/.env if needed
 
-# 3. Start all services (PostgreSQL, Redis, User Service)
+# 3. Start all services with Docker Compose
+# This single command will:
+#   - Pull and start PostgreSQL container (port 5432)
+#   - Pull and start Redis container (port 6379)
+#   - Build and start User Service container (port 50051)
+#   - Create databases and run migrations automatically
 docker-compose up -d
 
-# 4. Wait for services to initialize
+# 4. Wait for services to initialize and become healthy
 sleep 15
 
 # 5. Check service status
 docker-compose ps
 
 # Expected output:
-# agrios-postgres      Up (healthy)
-# agrios-redis         Up (healthy)
-# agrios-user-service  Up (healthy)
+# NAME                   STATUS
+# agrios-postgres        Up (healthy)   <- PostgreSQL database
+# agrios-redis           Up (healthy)   <- Redis cache
+# agrios-user-service    Up (healthy)   <- User Service (gRPC)
 
 # 6. View logs to confirm service is running
 docker logs agrios-user-service --tail 20
@@ -118,11 +124,39 @@ docker logs agrios-user-service --tail 20
 # User Service (gRPC) listening on port 50051
 ```
 
+**Important Notes:**
+- **PostgreSQL & Redis are started automatically** by Docker Compose - no manual installation needed
+- Database tables are created automatically from `migrations/001_create_users_table.sql`
+- All services run in isolated Docker containers with networking configured
+- Data persists in Docker volumes even after stopping containers
+
 **Database Migration:**
 
 The database tables are created automatically when the service starts. The migration file `migrations/001_create_users_table.sql` is executed on first run.
 
-**Verify Service is Working:**
+**Verify PostgreSQL and Redis in Docker:**
+
+```bash
+# Check PostgreSQL is running and accessible
+docker exec agrios-postgres psql -U postgres -c "SELECT version();"
+
+# Check Redis is running and accessible  
+docker exec agrios-redis redis-cli ping
+# Expected: PONG
+
+# View PostgreSQL databases
+docker exec agrios-postgres psql -U postgres -c "\l"
+# Should see: agrios_users, agrios_articles
+
+# Check users table exists
+docker exec agrios-postgres psql -U postgres -d agrios_users -c "\dt"
+# Should see: users table
+
+# Check Redis keys (token blacklist)
+docker exec agrios-redis redis-cli KEYS "*"
+```
+
+**Verify User Service is Working:**
 
 ```bash
 # Install grpcurl (if not already installed)
@@ -1003,26 +1037,54 @@ grpcurl -plaintext \
    # If error: Start Docker Desktop
    ```
 
-2. **Port conflicts**
+2. **PostgreSQL or Redis not accessible**
    ```bash
-   # Check if ports are already used
-   netstat -ano | findstr :50051  # Windows
-   lsof -i :50051                  # Linux/Mac
+   # Check if containers are running
+   docker-compose ps
    
-   # Stop conflicting services or change port in docker-compose.yml
+   # Check PostgreSQL
+   docker exec agrios-postgres psql -U postgres -c "SELECT 1;"
+   
+   # Check Redis
+   docker exec agrios-redis redis-cli ping
+   
+   # If containers not running, start them:
+   docker-compose up -d postgres redis
+   sleep 10
+   docker-compose up -d user-service
    ```
 
-3. **Missing .env file**
+3. **Port conflicts (5432, 6379, 50051)**
+   ```bash
+   # Check if ports are already used
+   netstat -ano | findstr :5432   # PostgreSQL
+   netstat -ano | findstr :6379   # Redis
+   netstat -ano | findstr :50051  # User Service
+   
+   # On Linux/Mac:
+   lsof -i :5432
+   lsof -i :6379
+   lsof -i :50051
+   
+   # Solutions:
+   # - Stop conflicting services
+   # - Or change ports in docker-compose.yml
+   ```
+
+4. **Missing .env file**
    ```bash
    # Copy from example
    cp service-1-user/.env.example service-1-user/.env
    ```
 
-4. **Old containers still running**
+5. **Old containers or volumes causing issues**
    ```bash
-   # Stop and remove old containers
-   docker-compose down
+   # Stop and remove everything
+   docker-compose down -v
+   
+   # Start fresh
    docker-compose up -d
+   sleep 15
    ```
 
 ---
@@ -1064,9 +1126,33 @@ docker-compose down && docker-compose up -d
 
 ### Database Connection Failed
 
-**Problem:** `failed to connect to postgres`
+**Problem:** `failed to connect to postgres` in User Service logs
 
-**Solutions:**
+**For Docker Setup (Recommended):**
+```bash
+# 1. Check PostgreSQL container is running
+docker-compose ps postgres
+# Should show: Up (healthy)
+
+# 2. Check if database was created
+docker exec agrios-postgres psql -U postgres -c "\l" | grep agrios_users
+
+# 3. If database missing, recreate containers
+docker-compose down -v
+docker-compose up -d
+
+# 4. Check PostgreSQL logs
+docker logs agrios-postgres
+
+# 5. Test connection from inside container
+docker exec agrios-postgres psql -U postgres -d agrios_users -c "SELECT 1;"
+
+# 6. Verify User Service can connect
+docker logs agrios-user-service | grep -i postgres
+# Should see: "Connected to PostgreSQL successfully"
+```
+
+**For Local Development:**
 ```bash
 # 1. Verify database exists
 psql -U postgres -l | grep agrios
@@ -1088,9 +1174,32 @@ psql -h localhost -U postgres -d agrios_users
 
 ### Redis Connection Failed
 
-**Problem:** `failed to connect to redis`
+**Problem:** `failed to connect to redis` in User Service logs
 
-**Solutions:**
+**For Docker Setup (Recommended):**
+```bash
+# 1. Check Redis container is running
+docker-compose ps redis
+# Should show: Up (healthy)
+
+# 2. Test Redis connection from inside container
+docker exec agrios-redis redis-cli ping
+# Expected: PONG
+
+# 3. Check Redis logs
+docker logs agrios-redis
+
+# 4. Verify User Service can connect
+docker logs agrios-user-service | grep -i redis
+# Should see: "Connected to Redis successfully"
+
+# 5. If issues persist, restart Redis
+docker-compose restart redis
+sleep 5
+docker-compose restart user-service
+```
+
+**For Local Development:**
 ```bash
 # 1. Check Redis is running
 redis-cli ping
