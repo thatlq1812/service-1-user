@@ -1,11 +1,9 @@
-module service-1-user
+module github.com/thatlq1812/service-1-user
 
 go 1.25
 
-replace agrios => ../
-
 require (
-	agrios v0.0.0-00010101000000-000000000000
+	github.com/thatlq1812/agrios-shared v1.2.3
 	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/jackc/pgx/v5 v5.7.6
 	github.com/joho/godotenv v1.5.1
