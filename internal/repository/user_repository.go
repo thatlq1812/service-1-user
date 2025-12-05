@@ -2,7 +2,8 @@ package repository
 
 import (
 	"context"
-	pb "service-1-user/proto"
+
+	pb "github.com/thatlq1812/service-1-user/proto"
 )
 
 // UserRepository defines the interface for user data operations

@@ -1,8 +1,8 @@
 package config
 
 import (
-	"agrios/pkg/common"
-	"service-1-user/internal/db"
+	"github.com/thatlq1812/agrios-shared/pkg/common"
+	"github.com/thatlq1812/service-1-user/internal/db"
 	"time"
 )
 

@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package user;
 
-option go_package = "service-1-user/proto";
+option go_package = "github.com/thatlq1812/agrios-shared/proto";
 
 service UserService {
   rpc CreateUser (CreateUserRequest) returns (CreateUserResponse);

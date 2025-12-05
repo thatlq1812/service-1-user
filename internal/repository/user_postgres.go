@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	pb "service-1-user/proto"
+	pb "github.com/thatlq1812/service-1-user/proto"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"

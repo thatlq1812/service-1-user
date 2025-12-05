@@ -7,6 +7,7 @@ require (
 	github.com/jackc/pgx/v5 v5.7.6
 	github.com/joho/godotenv v1.5.1
 	github.com/redis/go-redis/v9 v9.17.2
+	github.com/thatlq1812/agrios-shared v1.2.3
 	golang.org/x/crypto v0.45.0
 	google.golang.org/grpc v1.77.0
 	google.golang.org/protobuf v1.36.10

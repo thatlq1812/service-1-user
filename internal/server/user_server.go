@@ -5,10 +5,10 @@ import (
 	"errors"
 	"strings"
 
-	"service-1-user/internal/auth"
-	"service-1-user/internal/repository"
-	"service-1-user/internal/response"
-	pb "service-1-user/proto"
+	"github.com/thatlq1812/service-1-user/internal/auth"
+	"github.com/thatlq1812/service-1-user/internal/repository"
+	"github.com/thatlq1812/service-1-user/internal/response"
+	pb "github.com/thatlq1812/service-1-user/proto"
 
 	"google.golang.org/grpc/codes"
 )

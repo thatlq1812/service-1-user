@@ -1,7 +1,7 @@
 package response
 
 import (
-	pb "service-1-user/proto"
+	pb "github.com/thatlq1812/service-1-user/proto"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

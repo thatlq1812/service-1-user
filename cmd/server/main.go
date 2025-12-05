@@ -8,13 +8,13 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 
-	"agrios/pkg/common"
-	"service-1-user/internal/auth"
-	"service-1-user/internal/config"
-	"service-1-user/internal/db"
-	"service-1-user/internal/repository"
-	"service-1-user/internal/server"
-	pb "service-1-user/proto"
+	"github.com/thatlq1812/agrios-shared/pkg/common"
+	"github.com/thatlq1812/service-1-user/internal/auth"
+	"github.com/thatlq1812/service-1-user/internal/config"
+	"github.com/thatlq1812/service-1-user/internal/db"
+	"github.com/thatlq1812/service-1-user/internal/repository"
+	"github.com/thatlq1812/service-1-user/internal/server"
+	pb "github.com/thatlq1812/service-1-user/proto"
 )
 
 func main() {
