@@ -11,6 +11,7 @@
 ## Table of Contents
 
 - [Quick Start](#quick-start)
+- [Prerequisites](#prerequisites)
 - [Overview](#overview)
 - [Setup Options](#setup-options)
   - [Option 1: Docker](#option-1-docker-recommended)
@@ -76,6 +77,52 @@ grpcurl -plaintext localhost:50051 list
 **Service will be running on port 50051**
 
 See [Setup Options](#setup-options) for detailed instructions.
+
+---
+
+## Prerequisites
+
+### For Docker Setup (Recommended)
+
+- **Docker** 20.10+ and **Docker Compose** 1.29+
+- **Git** for cloning the repository
+- 2GB RAM minimum
+- Ports 50051, 5432, 6379 available
+
+### For Local Development
+
+- **Go** 1.21 or higher
+- **PostgreSQL** 13+ (local installation)
+- **Redis** 6+ (local installation)
+- **grpcurl** for testing gRPC endpoints
+
+### Install grpcurl
+
+**Via Go:**
+```bash
+go install github.com/fullstorydev/grpcurl/cmd/grpcurl@latest
+```
+
+**Windows (Chocolatey):**
+```powershell
+choco install grpcurl
+```
+
+**Linux:**
+```bash
+# Ubuntu/Debian
+sudo apt-get install grpcurl
+
+# Or download from GitHub releases
+wget https://github.com/fullstorydev/grpcurl/releases/download/v1.8.7/grpcurl_1.8.7_linux_x86_64.tar.gz
+tar -xvf grpcurl_1.8.7_linux_x86_64.tar.gz
+sudo mv grpcurl /usr/local/bin/
+```
+
+**macOS:**
+```bash
+brew install grpcurl
+```
 
 ---
 
@@ -169,8 +216,8 @@ Run only User Service independently without other services.
 
 ```bash
 # 1. Clone repository
-git clone https://github.com/thatlq1812/agrios.git
-cd agrios/service-1-user
+git clone https://github.com/thatlq1812/service-1-user.git
+cd service-1-user
 
 # 2. Configure environment
 cp .env.example .env
