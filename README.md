@@ -1,58 +1,366 @@
-# User Service
+# Service 1: User Service
 
-gRPC microservice for user management and authentication.
+> Authentication and user management microservice with JWT tokens and Redis blacklist
 
-**Port:** `50051` | **Protocol:** gRPC
-
-## Quick Start
-
-```bash
-# Setup database
-psql -U postgres -c "CREATE DATABASE agrios_users;"
-psql -U postgres -d agrios_users -f migrations/001_create_users_table.sql
-
-# Run
-cp .env.example .env  # Edit with your config
-go run cmd/server/main.go
-```
-
-## Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DB_HOST` | localhost | PostgreSQL host |
-| `DB_PORT` | 5432 | PostgreSQL port |
-| `DB_NAME` | agrios_users | Database name |
-| `REDIS_ADDR` | localhost:6379 | Redis (for token blacklist) |
-| `JWT_SECRET` | *required* | JWT signing secret |
-| `GRPC_PORT` | 50051 | gRPC server port |
+**Protocol:** gRPC  
+**Port:** 50051  
+**Database:** PostgreSQL + Redis
 
 ---
 
-# API Reference
+## Table of Contents
 
-## User Management
+- [Quick Start](#quick-start)
+- [Overview](#overview)
+- [Setup Options](#setup-options)
+  - [Option 1: Docker](#option-1-docker-recommended)
+  - [Option 2: Terminal (Local)](#option-2-terminal-local-development)
+- [Environment Configuration](#environment-configuration)
+- [API Reference](#api-reference)
+- [Database Schema](#database-schema)
+- [Testing](#testing)
+- [Troubleshooting](#troubleshooting)
+
+---
+
+## Quick Start
+
+**For new users cloning the project:**
+
+```bash
+# Clone and setup
+git clone https://github.com/thatlq1812/agrios.git
+cd agrios
+
+# Configure (optional - defaults work fine)
+cp service-1-user/.env.example service-1-user/.env
+
+# Start services
+docker-compose up -d
+
+# Wait for initialization
+sleep 15
+
+# Verify
+docker logs agrios-user-service
+
+# Test
+grpcurl -plaintext localhost:50051 list
+```
+
+**Service will be running on port 50051**
+
+See [Setup Options](#setup-options) for detailed instructions.
+
+---
+
+## Overview
+
+User Service handles authentication and user management for the Agrios platform.
+
+**Features:**
+- JWT authentication with dual-token system (access + refresh)
+- User CRUD operations
+- Password hashing with bcrypt
+- Token blacklist with Redis
+- Token rotation for security
+- Email uniqueness validation
+
+**Technology Stack:**
+- **Language:** Go 1.21+
+- **Protocol:** gRPC
+- **Database:** PostgreSQL 15
+- **Cache:** Redis 7
+- **Auth:** JWT with bcrypt
+
+---
+
+## Setup Options
+
+### Option 1: Docker (Recommended)
+
+**Prerequisites:**
+- Docker 20.10+
+- Docker Compose 1.29+
+- Git
+
+**Quick Start from Scratch:**
+
+```bash
+# 1. Clone repository
+git clone https://github.com/thatlq1812/agrios.git
+cd agrios
+
+# 2. Configure environment (use defaults or customize)
+cp service-1-user/.env.example service-1-user/.env
+# Optional: Edit service-1-user/.env if needed
+
+# 3. Start all services (PostgreSQL, Redis, User Service)
+docker-compose up -d
+
+# 4. Wait for services to initialize
+sleep 15
+
+# 5. Check service status
+docker-compose ps
+
+# Expected output:
+# agrios-postgres      Up (healthy)
+# agrios-redis         Up (healthy)
+# agrios-user-service  Up (healthy)
+
+# 6. View logs to confirm service is running
+docker logs agrios-user-service --tail 20
+
+# Expected output:
+# Connected to PostgreSQL successfully
+# Connected to Redis successfully
+# User Service (gRPC) listening on port 50051
+```
+
+**Database Migration:**
+
+The database tables are created automatically when the service starts. The migration file `migrations/001_create_users_table.sql` is executed on first run.
+
+**Verify Service is Working:**
+
+```bash
+# Install grpcurl (if not already installed)
+go install github.com/fullstorydev/grpcurl/cmd/grpcurl@latest
+
+# List available services
+grpcurl -plaintext localhost:50051 list
+
+# Expected: user.UserService
+
+# Test CreateUser
+grpcurl -plaintext \
+  -d '{"name":"Test User","email":"test@example.com","password":"TestPass123"}' \
+  localhost:50051 user.UserService.CreateUser
+
+# Expected: Success response with user data
+```
+
+**User Service Docker Details:**
+```yaml
+# From docker-compose.yml
+user-service:
+  build: ./service-1-user
+  ports:
+    - "50051:50051"
+  depends_on:
+    - postgres
+    - redis
+  environment:
+    - DB_HOST=postgres
+    - REDIS_HOST=redis
+```
+
+**Rebuild after code changes:**
+```bash
+docker-compose up -d --build user-service
+```
+
+---
+
+### Option 2: Terminal (Local Development)
+
+**Prerequisites:**
+- Go 1.21+
+- PostgreSQL 15+
+- Redis 7+
+
+#### Step 1: Install Dependencies
+
+```bash
+cd service-1-user
+
+# Download Go dependencies
+go mod download
+
+# Verify dependencies
+go mod verify
+```
+
+#### Step 2: Setup Database
+
+**PostgreSQL:**
+```bash
+# Create database
+psql -U postgres -c "CREATE DATABASE agrios_users;"
+
+# Run migration
+psql -U postgres -d agrios_users -f migrations/001_create_users_table.sql
+
+# Verify
+psql -U postgres -d agrios_users -c "\dt"
+```
+
+**Redis:**
+```bash
+# Start Redis server
+redis-server
+
+# In another terminal, verify
+redis-cli ping
+# Expected: PONG
+```
+
+#### Step 3: Configure Environment
+
+```bash
+# Copy example
+cp .env.example .env
+
+# Edit configuration
+nano .env
+```
+
+**Required settings for local development:**
+```env
+# Database (local PostgreSQL)
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=postgres
+DB_PASSWORD=yourpassword
+DB_NAME=agrios_users
+
+# Redis (local)
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_PASSWORD=
+
+# JWT
+JWT_SECRET=your-super-secret-key
+ACCESS_TOKEN_DURATION=15m
+REFRESH_TOKEN_DURATION=168h
+
+# Server
+GRPC_PORT=50051
+```
+
+#### Step 4: Build and Run
+
+```bash
+# Build
+go build -o bin/user-service ./cmd/server
+
+# Run
+./bin/user-service
+
+# Or run directly
+go run cmd/server/main.go
+```
+
+**Expected output:**
+```
+2025/12/05 10:00:00 Connected to PostgreSQL
+2025/12/05 10:00:00 Connected to Redis
+2025/12/05 10:00:00 User Service listening on :50051
+```
+
+#### Step 5: Verify Service
+
+```bash
+# Install grpcurl (if not installed)
+go install github.com/fullstorydev/grpcurl/cmd/grpcurl@latest
+
+# List available services
+grpcurl -plaintext localhost:50051 list
+
+# Expected output:
+# grpc.reflection.v1alpha.ServerReflection
+# user.UserService
+
+# Test CreateUser
+grpcurl -plaintext \
+  -d '{"name":"Test User","email":"test@example.com","password":"pass123"}' \
+  localhost:50051 user.UserService.CreateUser
+```
+
+---
+
+## Environment Configuration
+
+### Complete Environment Variables
+
+```env
+# Database Configuration
+DB_HOST=localhost               # PostgreSQL host (use 'postgres' for Docker)
+DB_PORT=5432                    # PostgreSQL port
+DB_USER=postgres                # Database user
+DB_PASSWORD=yourpassword        # Database password
+DB_NAME=agrios_users            # Database name
+
+# Redis Configuration
+REDIS_HOST=localhost            # Redis host (use 'redis' for Docker)
+REDIS_PORT=6379                 # Redis port
+REDIS_PASSWORD=                 # Redis password (optional)
+
+# JWT Configuration
+JWT_SECRET=your-super-secret-key-change-in-production
+ACCESS_TOKEN_DURATION=15m       # Access token expiration (15 minutes)
+REFRESH_TOKEN_DURATION=168h     # Refresh token expiration (7 days = 168 hours)
+
+# Server Configuration
+GRPC_PORT=50051                 # gRPC server port
+LOG_LEVEL=info                  # Logging level (debug, info, warn, error)
+```
+
+### Security Recommendations
+
+**Production Settings:**
+```env
+# Use strong JWT secret (32+ characters)
+JWT_SECRET=$(openssl rand -base64 32)
+
+# Use secure database credentials
+DB_PASSWORD=$(openssl rand -base64 16)
+
+# Enable Redis password
+REDIS_PASSWORD=$(openssl rand -base64 16)
+
+# Adjust token durations for security
+ACCESS_TOKEN_DURATION=15m       # Keep short
+REFRESH_TOKEN_DURATION=168h     # 7 days maximum
+```
+
+---
+
+## API Reference
+
+### gRPC Service Definition
+
+```protobuf
+service UserService {
+  // User Management
+  rpc CreateUser (CreateUserRequest) returns (CreateUserResponse);
+  rpc GetUser (GetUserRequest) returns (GetUserResponse);
+  rpc UpdateUser (UpdateUserRequest) returns (UpdateUserResponse);
+  rpc DeleteUser (DeleteUserRequest) returns (DeleteUserResponse);
+  rpc ListUsers (ListUsersRequest) returns (ListUsersResponse);
+  
+  // Authentication
+  rpc Login (LoginRequest) returns (LoginResponse);
+  rpc ValidateToken (ValidateTokenRequest) returns (ValidateTokenResponse);
+  rpc RefreshToken (RefreshTokenRequest) returns (RefreshTokenResponse);
+  rpc Logout (LogoutRequest) returns (LogoutResponse);
+}
+```
 
 ### 1. CreateUser
 
 Register a new user account.
 
 **Request:**
-```protobuf
-message CreateUserRequest {
-  string name = 1;      // Required
-  string email = 2;     // Required, unique
-  string password = 3;  // Required
-}
-```
-
-**Example:**
 ```bash
-grpcurl -plaintext -d '{
-  "name": "John Doe",
-  "email": "john@example.com",
-  "password": "secret123"
-}' localhost:50051 user.UserService/CreateUser
+grpcurl -plaintext \
+  -d '{
+    "name": "John Doe",
+    "email": "john@example.com",
+    "password": "securepass123"
+  }' \
+  localhost:50051 user.UserService.CreateUser
 ```
 
 **Response:**
@@ -65,29 +373,176 @@ grpcurl -plaintext -d '{
       "id": 1,
       "name": "John Doe",
       "email": "john@example.com",
-      "created_at": "2025-01-01T00:00:00Z",
-      "updated_at": "2025-01-01T00:00:00Z"
+      "createdAt": "2025-12-05T10:00:00Z",
+      "updatedAt": "2025-12-05T10:00:00Z"
     }
   }
 }
 ```
 
+**Validation:**
+- Name: Required, min 2 characters
+- Email: Required, valid email format, unique
+- Password: Required, min 8 characters
+
 ---
 
-### 2. GetUser
+### 2. Login
 
-Get user by ID.
+Authenticate user and receive JWT tokens.
 
 **Request:**
-```protobuf
-message GetUserRequest {
-  int32 id = 1;  // Required
+```bash
+grpcurl -plaintext \
+  -d '{
+    "email": "john@example.com",
+    "password": "securepass123"
+  }' \
+  localhost:50051 user.UserService.Login
+```
+
+**Response:**
+```json
+{
+  "code": "000",
+  "message": "Login successful",
+  "data": {
+    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  }
 }
 ```
 
-**Example:**
+**Token Details:**
+- **Access Token**: 15 minutes validity, use for API requests
+- **Refresh Token**: 7 days validity, use to get new access token
+
+**Save tokens:**
 ```bash
-grpcurl -plaintext -d '{"id": 1}' localhost:50051 user.UserService/GetUser
+LOGIN_RESP=$(grpcurl -plaintext \
+  -d '{"email":"john@example.com","password":"securepass123"}' \
+  localhost:50051 user.UserService.Login)
+
+ACCESS_TOKEN=$(echo "$LOGIN_RESP" | grep 'accessToken' | cut -d'"' -f4)
+REFRESH_TOKEN=$(echo "$LOGIN_RESP" | grep 'refreshToken' | cut -d'"' -f4)
+```
+
+---
+
+### 3. ValidateToken
+
+Check if access token is valid.
+
+**Request:**
+```bash
+grpcurl -plaintext \
+  -d "{\"token\":\"$ACCESS_TOKEN\"}" \
+  localhost:50051 user.UserService.ValidateToken
+```
+
+**Response (Valid):**
+```json
+{
+  "code": "000",
+  "message": "success",
+  "data": {
+    "valid": true,
+    "userId": 1,
+    "email": "john@example.com"
+  }
+}
+```
+
+**Response (Invalid):**
+```json
+{
+  "code": "004",
+  "message": "Invalid or expired token",
+  "data": {
+    "valid": false
+  }
+}
+```
+
+---
+
+### 4. RefreshToken
+
+Get new access token using refresh token.
+
+**Request:**
+```bash
+grpcurl -plaintext \
+  -d "{\"refresh_token\":\"$REFRESH_TOKEN\"}" \
+  localhost:50051 user.UserService.RefreshToken
+```
+
+**Response:**
+```json
+{
+  "code": "000",
+  "message": "success",
+  "data": {
+    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  }
+}
+```
+
+**Security Features:**
+- Old refresh token is invalidated (token rotation)
+- New refresh token issued with new expiration
+- Old refresh token added to Redis blacklist
+
+---
+
+### 5. Logout
+
+Invalidates tokens immediately for complete logout.
+
+**Request (Complete Logout - Recommended):**
+```bash
+# Blacklist BOTH access and refresh tokens
+grpcurl -plaintext \
+  -d "{\"token\":\"$ACCESS_TOKEN\",\"refresh_token\":\"$REFRESH_TOKEN\"}" \
+  localhost:50051 user.UserService.Logout
+```
+
+**Request (Access Token Only - Partial Logout):**
+```bash
+# Blacklist access token only (refresh token can still be used)
+grpcurl -plaintext \
+  -d "{\"token\":\"$ACCESS_TOKEN\"}" \
+  localhost:50051 user.UserService.Logout
+```
+
+**Response:**
+```json
+{
+  "code": "000",
+  "message": "Logout successful"
+}
+```
+
+**Implementation:**
+- Access token added to Redis blacklist (required)
+- Refresh token added to Redis blacklist (if provided)
+- Both tokens cannot be reused after logout
+- Tokens auto-deleted from blacklist when expired (TTL)
+- Token remains invalid until natural expiration
+- Refresh token should be discarded by client
+
+---
+
+### 6. GetUser
+
+Retrieve user by ID.
+
+**Request:**
+```bash
+grpcurl -plaintext \
+  -d '{"id": 1}' \
+  localhost:50051 user.UserService.GetUser
 ```
 
 **Response:**
@@ -100,8 +555,8 @@ grpcurl -plaintext -d '{"id": 1}' localhost:50051 user.UserService/GetUser
       "id": 1,
       "name": "John Doe",
       "email": "john@example.com",
-      "created_at": "2025-01-01T00:00:00Z",
-      "updated_at": "2025-01-01T00:00:00Z"
+      "createdAt": "2025-12-05T10:00:00Z",
+      "updatedAt": "2025-12-05T10:00:00Z"
     }
   }
 }
@@ -109,94 +564,74 @@ grpcurl -plaintext -d '{"id": 1}' localhost:50051 user.UserService/GetUser
 
 ---
 
-### 3. UpdateUser
+### 7. UpdateUser
 
 Update user information (partial update supported).
 
 **Request:**
-```protobuf
-message UpdateUserRequest {
-  int32 id = 1;               // Required
-  optional string name = 2;    // Optional
-  optional string email = 3;   // Optional
-  optional string password = 4; // Optional
-}
-```
-
-**Example:**
 ```bash
-grpcurl -plaintext -d '{
-  "id": 1,
-  "name": "John Updated"
-}' localhost:50051 user.UserService/UpdateUser
+grpcurl -plaintext \
+  -d '{
+    "id": 1,
+    "name": "John Smith",
+    "email": "johnsmith@example.com"
+  }' \
+  localhost:50051 user.UserService.UpdateUser
 ```
 
 **Response:**
 ```json
 {
   "code": "000",
-  "message": "success",
+  "message": "User updated successfully",
   "data": {
     "user": {
       "id": 1,
-      "name": "John Updated",
-      "email": "john@example.com",
-      "created_at": "2025-01-01T00:00:00Z",
-      "updated_at": "2025-01-01T12:00:00Z"
+      "name": "John Smith",
+      "email": "johnsmith@example.com",
+      "updatedAt": "2025-12-05T11:00:00Z"
     }
   }
 }
 ```
 
+**Note:** Only provided fields are updated (partial update)
+
 ---
 
-### 4. DeleteUser
+### 8. DeleteUser
 
 Delete user account.
 
 **Request:**
-```protobuf
-message DeleteUserRequest {
-  int32 id = 1;  // Required
-}
-```
-
-**Example:**
 ```bash
-grpcurl -plaintext -d '{"id": 1}' localhost:50051 user.UserService/DeleteUser
+grpcurl -plaintext \
+  -d '{"id": 1}' \
+  localhost:50051 user.UserService.DeleteUser
 ```
 
 **Response:**
 ```json
 {
   "code": "000",
-  "message": "success",
-  "data": {
-    "success": true
-  }
+  "message": "User deleted successfully"
 }
 ```
 
 ---
 
-### 5. ListUsers
+### 9. ListUsers
 
-Get paginated user list.
+Get paginated list of users.
 
 **Request:**
-```protobuf
-message ListUsersRequest {
-  int32 page = 1;       // Default: 1
-  int32 page_size = 2;  // Default: 10
-}
-```
-
-**Example:**
 ```bash
-grpcurl -plaintext -d '{
-  "page": 1,
-  "page_size": 10
-}' localhost:50051 user.UserService/ListUsers
+grpcurl -plaintext \
+  -d '{
+    "page": 1,
+    "page_size": 10
+  }' \
+  localhost:50051 user.UserService.ListUsers
 ```
 
 **Response:**
@@ -206,53 +641,18 @@ grpcurl -plaintext -d '{
   "message": "success",
   "data": {
     "users": [
-      {"id": 1, "name": "John Doe", "email": "john@example.com"},
-      {"id": 2, "name": "Jane Smith", "email": "jane@example.com"}
+      {
+        "id": 1,
+        "name": "John Doe",
+        "email": "john@example.com",
+        "createdAt": "2025-12-05T10:00:00Z"
+      }
     ],
-    "total": 25,
-    "page": 1,
-    "size": 10,
-    "has_more": true
-  }
-}
-```
-
----
-
-## Authentication
-
-### 6. Login
-
-Authenticate user and get JWT tokens.
-
-**Request:**
-```protobuf
-message LoginRequest {
-  string email = 1;     // Required
-  string password = 2;  // Required
-}
-```
-
-**Example:**
-```bash
-grpcurl -plaintext -d '{
-  "email": "john@example.com",
-  "password": "secret123"
-}' localhost:50051 user.UserService/Login
-```
-
-**Response:**
-```json
-{
-  "code": "000",
-  "message": "success",
-  "data": {
-    "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-    "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-    "user": {
-      "id": 1,
-      "name": "John Doe",
-      "email": "john@example.com"
+    "pagination": {
+      "page": 1,
+      "pageSize": 10,
+      "totalCount": 25,
+      "totalPages": 3
     }
   }
 }
@@ -260,89 +660,590 @@ grpcurl -plaintext -d '{
 
 ---
 
-### 7. ValidateToken
+## Database Schema
 
-Validate JWT token (used by other services).
+### Users Table
 
-**Request:**
-```protobuf
-message ValidateTokenRequest {
-  string token = 1;  // Required
-}
+```sql
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX idx_users_email ON users(email);
 ```
 
-**Example:**
+### Redis Keys
+
+**Token Blacklist System:**
+```
+Key Format: blacklist:<full-token-string>
+Value: "revoked"
+TTL: Automatically set to remaining token lifetime
+```
+
+**Blacklist Algorithm:**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Token Blacklist Flow                          │
+└─────────────────────────────────────────────────────────────────┘
+
+1. InvalidateToken(token) called by:
+   ├─> Logout: Blacklist access token (required) + refresh token (optional)
+   └─> RefreshToken: Blacklist old refresh token (automatic rotation)
+
+2. Parse token without signature verification:
+   token = jwt.ParseUnverified(tokenString)
+   claims = token.Claims
+
+3. Calculate remaining lifetime:
+   timeRemaining = claims.ExpiresAt - time.Now()
+   
+   if timeRemaining <= 0:
+       return nil  // Already expired, no need to blacklist
+
+4. Store in Redis with TTL:
+   key = "blacklist:" + tokenString
+   value = "revoked"
+   TTL = timeRemaining
+   
+   Redis.Set(key, value, TTL)
+
+5. Auto-cleanup by Redis:
+   - When TTL reaches 0, Redis automatically deletes key
+   - No manual cleanup needed
+   - Memory efficient
+```
+
+**Token Validation Algorithm:**
+
+```
+ValidateToken(token):
+├─> 1. Check Redis blacklist:
+│      key = "blacklist:" + token
+│      if Redis.Exists(key):
+│          return Error("token has been revoked")
+│
+├─> 2. Verify JWT signature:
+│      claims, err = jwt.ParseWithClaims(token, secretKey)
+│      if err:
+│          return Error("invalid token signature")
+│
+├─> 3. Check token type:
+│      if claims.TokenType != "access":
+│          return Error("invalid token type")
+│
+└─> 4. Return claims:
+       return claims, nil
+
+ValidateRefreshToken(token):
+├─> Same as ValidateToken but checks TokenType == "refresh"
+```
+
+**Complete Logout Flow:**
+
+```
+Logout(accessToken, refreshToken):
+├─> 1. Validate access token (required):
+│      if accessToken == "":
+│          return Error("access token required")
+│
+├─> 2. Blacklist access token:
+│      err = InvalidateToken(accessToken)
+│      if err:
+│          return Error("failed to invalidate access token")
+│      → Redis: blacklist:<access_token> = "revoked" (TTL=15min)
+│
+├─> 3. Blacklist refresh token (if provided):
+│      if refreshToken != "":
+│          err = InvalidateToken(refreshToken)
+│          if err:
+│              return Error("failed to invalidate refresh token")
+│          → Redis: blacklist:<refresh_token> = "revoked" (TTL=7days)
+│
+└─> 4. Return success:
+       return {success: true}
+```
+
+**Token Rotation Flow (RefreshToken):**
+
+```
+RefreshToken(oldRefreshToken):
+├─> 1. Validate old refresh token:
+│      claims, err = ValidateRefreshToken(oldRefreshToken)
+│      → Checks blacklist first, then signature
+│      if err:
+│          return Error("invalid or expired refresh token")
+│
+├─> 2. Blacklist old refresh token (security):
+│      err = InvalidateToken(oldRefreshToken)
+│      → Redis: blacklist:<old_refresh> = "revoked" (TTL=7days)
+│
+├─> 3. Generate new access token:
+│      newAccessToken = GenerateToken(claims.UserID, claims.Email)
+│      → Expiration: 15 minutes
+│
+├─> 4. Generate new refresh token:
+│      newRefreshToken = GenerateRefreshToken(claims.UserID, claims.Email)
+│      → Expiration: 7 days
+│
+└─> 5. Return new token pair:
+       return {
+           access_token: newAccessToken,
+           refresh_token: newRefreshToken
+       }
+```
+
+**How It Works:**
+1. **Logout**: Blacklist both access + refresh tokens to prevent reuse
+2. **RefreshToken**: Automatically blacklist old refresh token (token rotation)
+3. **ValidateToken**: Check blacklist before signature verification
+4. **Auto-cleanup**: Redis TTL automatically deletes expired entries
+5. **No manual cleanup needed**: TTL mechanism handles everything
+
+**Example Commands:**
 ```bash
-grpcurl -plaintext -d '{
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-}' localhost:50051 user.UserService/ValidateToken
+# Check if token is blacklisted (from host)
+docker-compose exec redis redis-cli GET "blacklist:<token>"
+
+# List all blacklisted tokens
+docker-compose exec redis redis-cli KEYS "blacklist:*"
+
+# Count blacklist entries
+docker-compose exec redis redis-cli KEYS "blacklist:*" | wc -l
+
+# Check TTL (seconds until auto-deletion)
+docker-compose exec redis redis-cli TTL "blacklist:<token>"
+# Output: 900 = 15 minutes (access token)
+# Output: 604800 = 7 days (refresh token)
+# Output: -2 = key doesn't exist (already deleted)
 ```
 
-**Response (valid):**
-```json
-{
-  "code": "000",
-  "message": "success",
-  "data": {
-    "valid": true,
-    "user_id": 1,
-    "email": "john@example.com"
-  }
-}
+**Automatic Cleanup Behavior:**
+- Access tokens (15 min): Auto-deleted after 15 minutes
+- Refresh tokens (7 days): Auto-deleted after 7 days
+- TTL counts down automatically
+- Memory efficient - old entries never accumulate
+- No cronjobs or background workers needed
+
+**Redis Commands:**
+```bash
+# Check if token is blacklisted (from host)
+docker-compose exec redis redis-cli GET "blacklist:<token>"
+
+# List all blacklisted tokens
+docker-compose exec redis redis-cli KEYS "blacklist:*"
+
+# Count blacklist entries
+docker-compose exec redis redis-cli KEYS "blacklist:*" | wc -l
+
+# Check TTL (seconds until auto-deletion)
+docker-compose exec redis redis-cli TTL "blacklist:<token>"
+# Output examples:
+#   900 = 15 minutes remaining (access token)
+#   604800 = 7 days remaining (refresh token)
+#   -1 = no TTL set (should never happen)
+#   -2 = key doesn't exist (already deleted or never blacklisted)
 ```
 
-**Response (invalid):**
-```json
-{
-  "code": "005",
-  "message": "invalid or expired token",
-  "data": {
-    "valid": false
-  }
-}
+**Complete Verification Test:**
+```bash
+# 1. Login to get both tokens
+LOGIN_RESP=$(curl -s -X POST http://localhost:8080/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@test.com","password":"pass123"}')
+
+# Extract tokens
+ACCESS_TOKEN=$(echo $LOGIN_RESP | grep -o '"access_token":"[^"]*' | cut -d'"' -f4)
+REFRESH_TOKEN=$(echo $LOGIN_RESP | grep -o '"refresh_token":"[^"]*' | cut -d'"' -f4)
+
+echo "Access Token: ${ACCESS_TOKEN:0:50}..."
+echo "Refresh Token: ${REFRESH_TOKEN:0:50}..."
+
+# 2. Check blacklist before logout
+echo "Blacklist count BEFORE logout:"
+docker-compose exec redis redis-cli KEYS "blacklist:*" | wc -l
+
+# 3. Complete logout (blacklist BOTH tokens)
+curl -X POST http://localhost:8080/api/v1/auth/logout \
+  -H "Content-Type: application/json" \
+  -d "{\"token\":\"$ACCESS_TOKEN\",\"refresh_token\":\"$REFRESH_TOKEN\"}"
+
+# 4. Check blacklist after logout
+echo "Blacklist count AFTER logout:"
+docker-compose exec redis redis-cli KEYS "blacklist:*" | wc -l
+
+# 5. Verify access token is blacklisted
+echo "Try to validate access token (should FAIL):"
+curl -s -X POST http://localhost:8080/api/v1/auth/validate \
+  -H "Content-Type: application/json" \
+  -d "{\"token\":\"$ACCESS_TOKEN\"}"
+# Expected: {"code":"016","message":"invalid or expired token"}
+
+# 6. Verify refresh token is blacklisted
+echo "Try to use refresh token (should FAIL):"
+curl -s -X POST http://localhost:8080/api/v1/auth/refresh \
+  -H "Content-Type: application/json" \
+  -d "{\"refresh_token\":\"$REFRESH_TOKEN\"}"
+# Expected: {"code":"016","message":"invalid or expired refresh token"}
+
+# 7. Check TTL for both tokens
+echo "Check TTL for blacklisted tokens:"
+docker-compose exec redis redis-cli --scan --pattern "blacklist:*" | while read key; do
+  TTL=$(docker-compose exec redis redis-cli TTL "$key" | tr -d '\r')
+  echo "TTL: $TTL seconds (~$(($TTL / 60)) minutes)"
+done
+```
+
+**Expected Results:**
+- Blacklist count increases by 2 (access + refresh tokens)
+- Access token validation fails: code "016"
+- Refresh token usage fails: code "016"
+- Access token TTL: ~900 seconds (15 minutes)
+- Refresh token TTL: ~604800 seconds (7 days)
+- After TTL expires: Redis auto-deletes both entries
+
+---
+
+## Testing
+
+### Unit Tests
+
+```bash
+cd service-1-user
+
+# Run all tests
+go test ./...
+
+# Run with coverage
+go test -cover ./...
+
+# Run specific package
+go test ./internal/auth/...
+
+# Verbose output
+go test -v ./...
+```
+
+### Integration Tests
+
+```bash
+# Ensure service is running
+docker-compose up -d user-service
+
+# Run test script
+bash ../scripts/test-user-service.sh
+```
+
+### Manual Testing Workflow
+
+```bash
+# 1. Create user
+grpcurl -plaintext \
+  -d '{"name":"Test","email":"test@example.com","password":"pass123"}' \
+  localhost:50051 user.UserService.CreateUser
+
+# 2. Login
+LOGIN_RESP=$(grpcurl -plaintext \
+  -d '{"email":"test@example.com","password":"pass123"}' \
+  localhost:50051 user.UserService.Login)
+
+ACCESS_TOKEN=$(echo "$LOGIN_RESP" | grep 'accessToken' | cut -d'"' -f4)
+REFRESH_TOKEN=$(echo "$LOGIN_RESP" | grep 'refreshToken' | cut -d'"' -f4)
+
+# 3. Validate token
+grpcurl -plaintext \
+  -d "{\"token\":\"$ACCESS_TOKEN\"}" \
+  localhost:50051 user.UserService.ValidateToken
+
+# 4. Get user
+grpcurl -plaintext -d '{"id":1}' localhost:50051 user.UserService.GetUser
+
+# 5. Update user
+grpcurl -plaintext \
+  -d '{"id":1,"name":"Updated Name"}' \
+  localhost:50051 user.UserService.UpdateUser
+
+# 6. Refresh token
+grpcurl -plaintext \
+  -d "{\"refresh_token\":\"$REFRESH_TOKEN\"}" \
+  localhost:50051 user.UserService.RefreshToken
+
+# 7. Logout
+grpcurl -plaintext \
+  -d "{\"token\":\"$ACCESS_TOKEN\"}" \
+  localhost:50051 user.UserService.Logout
+
+# 8. Verify token is blacklisted
+grpcurl -plaintext \
+  -d "{\"token\":\"$ACCESS_TOKEN\"}" \
+  localhost:50051 user.UserService.ValidateToken
+# Expected: valid=false
 ```
 
 ---
 
-### 8. Logout
+## Troubleshooting
 
-Invalidate token (add to Redis blacklist).
+### First Time Setup Issues
 
-**Request:**
-```protobuf
-message LogoutRequest {
-  string token = 1;  // Required
-}
-```
+**Problem:** After cloning, service won't start
 
-**Example:**
+**Common issues and solutions:**
+
+1. **Docker not running**
+   ```bash
+   # Check Docker status
+   docker ps
+   # If error: Start Docker Desktop
+   ```
+
+2. **Port conflicts**
+   ```bash
+   # Check if ports are already used
+   netstat -ano | findstr :50051  # Windows
+   lsof -i :50051                  # Linux/Mac
+   
+   # Stop conflicting services or change port in docker-compose.yml
+   ```
+
+3. **Missing .env file**
+   ```bash
+   # Copy from example
+   cp service-1-user/.env.example service-1-user/.env
+   ```
+
+4. **Old containers still running**
+   ```bash
+   # Stop and remove old containers
+   docker-compose down
+   docker-compose up -d
+   ```
+
+---
+
+### Service Won't Start
+
+**Problem:** Service fails to start
+
+**Check logs:**
 ```bash
-grpcurl -plaintext -d '{
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-}' localhost:50051 user.UserService/Logout
+# Docker
+docker logs agrios-user-service --tail 50
+
+# Or follow logs in real-time
+docker-compose logs -f user-service
 ```
 
-**Response:**
-```json
-{
-  "code": "000",
-  "message": "success",
-  "data": {
-    "success": true
-  }
-}
+**Common causes:**
+1. Database not ready (wait 15 seconds after docker-compose up)
+2. Redis not accessible
+3. Port 50051 already in use
+4. Missing environment variables
+
+**Solutions:**
+```bash
+# Check all services are healthy
+docker-compose ps
+
+# Expected: All services show "Up (healthy)"
+
+# Restart specific service
+docker-compose restart user-service
+
+# Full restart
+docker-compose down && docker-compose up -d
 ```
 
 ---
 
-## Error Codes
+### Database Connection Failed
 
-| Code | Description |
-|------|-------------|
-| `000` | Success |
-| `001` | Email already exists |
-| `002` | Validation error |
-| `003` | User not found |
-| `004` | Invalid credentials |
-| `005` | Invalid/expired token |
-| `500` | Internal server error |
+**Problem:** `failed to connect to postgres`
+
+**Solutions:**
+```bash
+# 1. Verify database exists
+psql -U postgres -l | grep agrios
+
+# 2. Create database if missing
+psql -U postgres -c "CREATE DATABASE agrios_users;"
+
+# 3. Run migrations
+psql -U postgres -d agrios_users -f migrations/001_create_users_table.sql
+
+# 4. Check credentials in .env
+cat .env | grep DB_
+
+# 5. Test connection
+psql -h localhost -U postgres -d agrios_users
+```
+
+---
+
+### Redis Connection Failed
+
+**Problem:** `failed to connect to redis`
+
+**Solutions:**
+```bash
+# 1. Check Redis is running
+redis-cli ping
+
+# 2. Start Redis if not running
+redis-server
+
+# 3. Check Redis configuration
+cat .env | grep REDIS_
+
+# 4. Test connection
+redis-cli -h localhost -p 6379 ping
+```
+
+---
+
+### Token Validation Fails
+
+**Problem:** ValidateToken returns `valid=false`
+
+**Possible causes:**
+1. Token expired
+2. Token blacklisted (after logout)
+3. JWT_SECRET mismatch
+4. Invalid token format
+
+**Solutions:**
+```bash
+# 1. Check token expiration
+# Access tokens expire after 15 minutes
+
+# 2. Use refresh token to get new access token
+grpcurl -plaintext \
+  -d "{\"refresh_token\":\"$REFRESH_TOKEN\"}" \
+  localhost:50051 user.UserService.RefreshToken
+
+# 3. Check if token is blacklisted
+redis-cli KEYS "blacklist:*"
+
+# 4. Login again
+grpcurl -plaintext \
+  -d '{"email":"test@example.com","password":"pass123"}' \
+  localhost:50051 user.UserService.Login
+```
+
+---
+
+### Email Already Exists
+
+**Problem:** `Email already registered`
+
+**Solutions:**
+```bash
+# 1. Use different email
+# 2. Delete existing user
+grpcurl -plaintext -d '{"id":1}' localhost:50051 user.UserService.DeleteUser
+
+# 3. Check existing users
+grpcurl -plaintext -d '{"page":1,"page_size":10}' localhost:50051 user.UserService.ListUsers
+```
+
+---
+
+## Project Structure
+
+```
+service-1-user/
+├── cmd/
+│   └── server/
+│       └── main.go              # Entry point
+├── internal/
+│   ├── auth/
+│   │   ├── jwt.go               # JWT token generation/validation
+│   │   └── password.go          # Password hashing
+│   ├── config/
+│   │   └── config.go            # Configuration loading
+│   ├── db/
+│   │   ├── postgres.go          # PostgreSQL connection
+│   │   └── redis.go             # Redis connection
+│   ├── repository/
+│   │   ├── user_repository.go   # Interface
+│   │   ├── user_postgres.go     # Implementation
+│   │   └── errors.go            # Custom errors
+│   ├── response/
+│   │   └── grpc_response.go     # Response builders
+│   └── server/
+│       └── user_server.go       # gRPC server implementation
+├── proto/
+│   ├── user_service.proto       # gRPC service definition
+│   ├── user_service.pb.go       # Generated code
+│   └── user_service_grpc.pb.go  # Generated gRPC code
+├── migrations/
+│   └── 001_create_users_table.sql
+├── .env.example                 # Environment template
+├── Dockerfile                   # Docker configuration
+├── go.mod                       # Go dependencies
+└── README.md                    # This file
+```
+
+---
+
+## Development Commands
+
+```bash
+# Install dependencies
+go mod download
+
+# Update dependencies
+go mod tidy
+
+# Build
+go build -o bin/user-service ./cmd/server
+
+# Run
+./bin/user-service
+
+# Run with hot reload (requires air)
+go install github.com/cosmtrek/air@latest
+air
+
+# Format code
+go fmt ./...
+
+# Lint code (requires golangci-lint)
+golangci-lint run
+
+# Generate proto files
+protoc --go_out=. --go_opt=paths=source_relative \
+  --go-grpc_out=. --go-grpc_opt=paths=source_relative \
+  proto/user_service.proto
+
+# Run tests
+go test ./...
+
+# Run tests with coverage
+go test -cover ./...
+
+# View coverage report
+go test -coverprofile=coverage.out ./...
+go tool cover -html=coverage.out
+```
+
+---
+
+## Additional Resources
+
+- **[Main Project README](../README.md)** - Complete platform documentation
+- **[Architecture Guide](../docs/ARCHITECTURE_GUIDE.md)** - System design
+- **[API Gateway](../service-3-gateway/README.md)** - REST API interface
+- **[Article Service](../service-2-article/README.md)** - Content service
+
+---
+
+**Service Version:** 1.0.0  
+**Last Updated:** December 5, 2025  
+**Maintainer:** thatlq1812@gmail.com

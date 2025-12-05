@@ -73,6 +73,9 @@ func (s *userServiceServer) CreateUser(ctx context.Context, req *pb.CreateUserRe
 	if req.Password != "" {
 		passwordHash, err := auth.HashPassword(req.Password)
 		if err != nil {
+			if strings.Contains(err.Error(), "password must") {
+				return nil, response.GRPCError(codes.InvalidArgument, err.Error())
+			}
 			return nil, response.GRPCError(codes.Internal, "Failed to hash password")
 		}
 
@@ -102,8 +105,13 @@ func isDuplicateError(err error) bool {
 	if err == nil {
 		return false
 	}
+	// Check if error is ErrEmailDuplicate
+	if errors.Is(err, repository.ErrEmailDuplicate) {
+		return true
+	}
+	// Fallback to string checking for wrapped errors
 	errMsg := err.Error()
-	return strings.Contains(errMsg, errDuplicateKey) || strings.Contains(errMsg, errUniqueViolation)
+	return strings.Contains(errMsg, errDuplicateKey) || strings.Contains(errMsg, errUniqueViolation) || strings.Contains(errMsg, "email already exists")
 }
 
 // isValidEmail validates email format using regex
@@ -124,7 +132,7 @@ func (s *userServiceServer) UpdateUser(ctx context.Context, req *pb.UpdateUserRe
 	}
 
 	// At least one field must be provided
-	if req.Name == "" && req.Email == "" && req.Password == "" {
+	if req.Name == nil && req.Email == nil && req.Password == nil {
 		return nil, response.GRPCError(codes.InvalidArgument, "At least one field must be provided for update")
 	}
 
@@ -132,21 +140,21 @@ func (s *userServiceServer) UpdateUser(ctx context.Context, req *pb.UpdateUserRe
 	var name, email, passwordHash *string
 
 	// Process name
-	if req.Name != "" {
-		name = &req.Name
+	if req.Name != nil {
+		name = req.Name
 	}
 
 	// Process email
-	if req.Email != "" {
-		if !isValidEmail(req.Email) {
+	if req.Email != nil {
+		if !isValidEmail(*req.Email) {
 			return nil, response.GRPCError(codes.InvalidArgument, "Invalid email format")
 		}
-		email = &req.Email
+		email = req.Email
 	}
 
 	// Process password
-	if req.Password != "" {
-		hash, err := auth.HashPassword(req.Password)
+	if req.Password != nil {
+		hash, err := auth.HashPassword(*req.Password)
 		if err != nil {
 			return nil, response.GRPCError(codes.Internal, "Failed to hash password")
 		}
@@ -255,7 +263,7 @@ func (s *userServiceServer) Login(ctx context.Context, req *pb.LoginRequest) (*p
 	}
 
 	// Return successful login response
-	return response.LoginSuccess(accessToken, refreshToken, userWithPassword.User), nil
+	return response.LoginSuccess(accessToken, refreshToken), nil
 }
 
 // ValidateToken verifies JWT token validity and returns claims
@@ -275,19 +283,62 @@ func (s *userServiceServer) ValidateToken(ctx context.Context, req *pb.ValidateT
 	return response.ValidateTokenSuccess(true, int64(claims.UserID), claims.Email), nil
 }
 
-// Logout handles user logout (stateless JWT)
-// Note: For stateless JWT, logout is handled client-side by removing the token.
-// In production, consider implementing a token blacklist using Redis for added security.
+// RefreshToken generates new access and refresh tokens using a valid refresh token
+func (s *userServiceServer) RefreshToken(ctx context.Context, req *pb.RefreshTokenRequest) (*pb.RefreshTokenResponse, error) {
+	// Validate input
+	if req.RefreshToken == "" {
+		return nil, response.GRPCError(codes.InvalidArgument, "Refresh token is required")
+	}
+
+	// Validate refresh token
+	claims, err := s.tokenManager.ValidateRefreshToken(ctx, req.RefreshToken)
+	if err != nil {
+		return nil, response.GRPCError(codes.Unauthenticated, "Invalid or expired refresh token")
+	}
+
+	// Optional: Invalidate old refresh token (token rotation for security)
+	err = s.tokenManager.InvalidateToken(ctx, req.RefreshToken)
+	if err != nil {
+		return nil, response.GRPCError(codes.Internal, "Failed to invalidate old token")
+	}
+
+	// Generate new access token
+	newAccessToken, err := s.tokenManager.GenerateToken(claims.UserID, claims.Email)
+	if err != nil {
+		return nil, response.GRPCError(codes.Internal, "Failed to generate access token")
+	}
+
+	// Generate new refresh token (token rotation)
+	newRefreshToken, err := s.tokenManager.GenerateRefreshToken(claims.UserID, claims.Email)
+	if err != nil {
+		return nil, response.GRPCError(codes.Internal, "Failed to generate refresh token")
+	}
+
+	return response.RefreshTokenSuccess(newAccessToken, newRefreshToken), nil
+}
+
+// Logout handles user logout with token blacklist
+// Blacklists both access token and refresh token (if provided) to prevent reuse
 func (s *userServiceServer) Logout(ctx context.Context, req *pb.LogoutRequest) (*pb.LogoutResponse, error) {
 	// Validate input
 	if req.Token == "" {
-		return nil, response.GRPCError(codes.InvalidArgument, "Token is required")
+		return nil, response.GRPCError(codes.InvalidArgument, "Access token is required")
 	}
 
-	// Invalidate token
+	// Invalidate access token
 	err := s.tokenManager.InvalidateToken(ctx, req.Token)
 	if err != nil {
-		return nil, response.GRPCError(codes.Internal, "Failed to logout")
+		return nil, response.GRPCError(codes.Internal, "Failed to invalidate access token")
+	}
+
+	// Invalidate refresh token if provided (recommended for complete logout)
+	if req.RefreshToken != "" {
+		err = s.tokenManager.InvalidateToken(ctx, req.RefreshToken)
+		if err != nil {
+			// Log error but don't fail logout - access token already blacklisted
+			// This ensures logout still succeeds even if refresh token invalidation fails
+			return nil, response.GRPCError(codes.Internal, "Failed to invalidate refresh token")
+		}
 	}
 
 	return response.LogoutSuccess(), nil

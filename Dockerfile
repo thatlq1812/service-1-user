@@ -3,10 +3,6 @@ FROM golang:1.25-alpine AS builder
 
 WORKDIR /build
 
-# Copy root go.mod and pkg folder
-COPY go.mod go.sum* ./
-COPY pkg/ ./pkg/
-
 # Copy service-1-user go.mod files
 COPY service-1-user/go.mod service-1-user/go.sum ./service-1-user/
 

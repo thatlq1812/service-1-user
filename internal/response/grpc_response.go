@@ -103,14 +103,13 @@ func ListUsersSuccess(users []*pb.User, total int64, page, size int32, hasMore b
 	}
 }
 
-func LoginSuccess(accessToken, refreshToken string, user *pb.User) *pb.LoginResponse {
+func LoginSuccess(accessToken, refreshToken string) *pb.LoginResponse {
 	return &pb.LoginResponse{
 		Code:    CodeSuccess,
 		Message: "Login successful",
 		Data: &pb.LoginData{
 			AccessToken:  accessToken,
 			RefreshToken: refreshToken,
-			User:         user,
 		},
 	}
 }
@@ -133,6 +132,17 @@ func LogoutSuccess() *pb.LogoutResponse {
 		Message: "Logout successful",
 		Data: &pb.LogoutData{
 			Success: true,
+		},
+	}
+}
+
+func RefreshTokenSuccess(accessToken, refreshToken string) *pb.RefreshTokenResponse {
+	return &pb.RefreshTokenResponse{
+		Code:    CodeSuccess,
+		Message: "Token refreshed successfully",
+		Data: &pb.RefreshTokenData{
+			AccessToken:  accessToken,
+			RefreshToken: refreshToken,
 		},
 	}
 }

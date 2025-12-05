@@ -12,6 +12,7 @@ service UserService {
   rpc ListUsers (ListUsersRequest) returns (ListUsersResponse);
   
   rpc Login (LoginRequest) returns (LoginResponse);
+  rpc RefreshToken (RefreshTokenRequest) returns (RefreshTokenResponse);
   rpc ValidateToken (ValidateTokenRequest) returns (ValidateTokenResponse);
   rpc Logout (LogoutRequest) returns (LogoutResponse);
 }
@@ -118,7 +119,6 @@ message LoginResponse {
 message LoginData {
   string access_token = 1;
   string refresh_token = 2;
-  User user = 3;
 }
 
 message ValidateTokenRequest {
@@ -138,7 +138,8 @@ message ValidateTokenData {
 }
 
 message LogoutRequest {
-  string token = 1;
+  string token = 1;  // Access token (required)
+  string refresh_token = 2;  // Refresh token (optional but recommended)
 }
 
 message LogoutResponse {
@@ -149,4 +150,19 @@ message LogoutResponse {
 
 message LogoutData {
   bool success = 1;
+}
+
+message RefreshTokenRequest {
+  string refresh_token = 1;
+}
+
+message RefreshTokenResponse {
+  string code = 1;
+  string message = 2;
+  RefreshTokenData data = 3;
+}
+
+message RefreshTokenData {
+  string access_token = 1;
+  string refresh_token = 2;
 }
