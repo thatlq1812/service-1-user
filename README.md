@@ -26,32 +26,10 @@
 
 ## Quick Start
 
-**For new users cloning the project, choose one:**
+**Service-1 is the foundation service that must run first.**
 
-### Quick Start 1: Run All Services (Recommended)
-```bash
-# Clone and setup
-git clone https://github.com/thatlq1812/agrios.git
-cd agrios
+### Standalone Mode (This Service Only)
 
-# Configure (optional - defaults work fine)
-cp service-1-user/.env.example service-1-user/.env
-
-# Start all services (User + Article + Gateway)
-docker-compose up -d
-sleep 15
-
-# Verify
-docker logs agrios-user-service
-
-# Install grpcurl for testing (if not already installed)
-go install github.com/fullstorydev/grpcurl/cmd/grpcurl@latest
-
-# Test
-grpcurl -plaintext localhost:50051 list
-```
-
-### Quick Start 2: Run User Service Only (Standalone)
 ```bash
 # Clone and setup
 git clone https://github.com/thatlq1812/service-1-user.git
@@ -60,21 +38,54 @@ cd service-1-user
 # Configure (optional - defaults work fine)
 cp .env.example .env
 
-# Start User Service only (with PostgreSQL + Redis)
+# Build and start (includes PostgreSQL + Redis)
+docker-compose build --no-cache
 docker-compose up -d
+
+# Wait for healthy status
 sleep 15
 
 # Verify
+docker ps
 docker logs user-service-app
-
-# Install grpcurl for testing (if not already installed)
-go install github.com/fullstorydev/grpcurl/cmd/grpcurl@latest
 
 # Test
 grpcurl -plaintext localhost:50051 list
 ```
 
-**Service will be running on port 50051**
+**Exposed Ports:**
+- `50051` - User Service gRPC
+- `5432` - PostgreSQL
+- `6379` - Redis
+
+### Multi-Service Sequential Startup
+
+**Order:** Service-1 → Service-2 → Service-3
+
+```bash
+# Step 1: Start User Service (Foundation)
+cd service-1-user
+docker-compose up -d
+sleep 15
+
+# Step 2: Start Article Service (requires User Service via host.docker.internal:50051)
+cd ../service-2-article
+docker-compose up -d
+sleep 10
+
+# Step 3: Start Gateway (requires both backend services)
+cd ../service-3-gateway
+docker-compose up -d
+sleep 5
+
+# Verify all services
+docker ps
+```
+
+**Service Dependencies:**
+- Service-1: Standalone (no dependencies)
+- Service-2: Requires Service-1 at `host.docker.internal:50051`
+- Service-3: Requires Service-1 at `host.docker.internal:50051` and Service-2 at `host.docker.internal:50052`
 
 See [Setup Options](#setup-options) for detailed instructions.
 
